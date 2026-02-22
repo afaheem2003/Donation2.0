@@ -1,70 +1,89 @@
-"use client";
+import React from "react";
+import { View, Text, Image, TouchableOpacity, StyleSheet } from "react-native";
+import { useRouter } from "expo-router";
+import { Nonprofit } from "@/lib/api";
+import { COLORS } from "@/lib/utils";
 
-import Link from "next/link";
-import Image from "next/image";
-import { BadgeCheck, DollarSign } from "lucide-react";
-import { formatCents } from "@/lib/utils";
-
-interface NonprofitCardProps {
-  id: string;
-  name: string;
-  description: string;
-  category: string;
-  logoUrl?: string | null;
-  verified: boolean;
+interface Props {
+  nonprofit: Nonprofit;
   donationCount?: number;
 }
 
-export function NonprofitCard({
-  id,
-  name,
-  description,
-  category,
-  logoUrl,
-  verified,
-  donationCount = 0,
-}: NonprofitCardProps) {
-  const categoryLabel = category.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+export function NonprofitCard({ nonprofit, donationCount }: Props) {
+  const router = useRouter();
+  const categoryLabel = nonprofit.category
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
-    <Link href={`/n/${id}`} className="block group">
-      <div className="bg-white rounded-2xl border border-gray-100 p-5 hover:border-brand-200 hover:shadow-md transition-all">
-        <div className="flex items-start gap-4">
-          {logoUrl ? (
-            <Image
-              src={logoUrl}
-              alt={name}
-              width={52}
-              height={52}
-              className="rounded-xl object-cover flex-shrink-0"
-            />
-          ) : (
-            <div className="w-[52px] h-[52px] rounded-xl bg-brand-50 flex items-center justify-center flex-shrink-0">
-              <span className="text-xl">🤝</span>
-            </div>
-          )}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 mb-1">
-              <h3 className="font-semibold text-gray-900 truncate group-hover:text-brand-600 transition-colors">
-                {name}
-              </h3>
-              {verified && (
-                <BadgeCheck className="w-4 h-4 text-brand-500 flex-shrink-0" />
-              )}
-            </div>
-            <span className="inline-block text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full mb-2">
-              {categoryLabel}
-            </span>
-            <p className="text-sm text-gray-500 line-clamp-2">{description}</p>
-          </div>
-        </div>
-        {donationCount > 0 && (
-          <div className="mt-3 pt-3 border-t border-gray-50 flex items-center gap-1 text-xs text-gray-400">
-            <DollarSign className="w-3 h-3" />
-            {donationCount.toLocaleString()} donations
-          </div>
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => router.push(`/nonprofit/${nonprofit.id}` as never)}
+      activeOpacity={0.85}
+    >
+      {nonprofit.logoUrl ? (
+        <Image source={{ uri: nonprofit.logoUrl }} style={styles.logo} />
+      ) : (
+        <View style={[styles.logo, styles.logoFallback]}>
+          <Text style={{ fontSize: 22 }}>🤝</Text>
+        </View>
+      )}
+      <View style={styles.info}>
+        <View style={styles.nameRow}>
+          <Text style={styles.name} numberOfLines={1}>{nonprofit.name}</Text>
+          {nonprofit.verified && <Text style={styles.verified}>✓</Text>}
+        </View>
+        <Text style={styles.category}>{categoryLabel}</Text>
+        <Text style={styles.description} numberOfLines={2}>
+          {nonprofit.description}
+        </Text>
+        {!!donationCount && donationCount > 0 && (
+          <Text style={styles.donationCount}>
+            💚 {donationCount.toLocaleString()} donations
+          </Text>
         )}
-      </div>
-    </Link>
+      </View>
+    </TouchableOpacity>
   );
 }
+
+const styles = StyleSheet.create({
+  card: {
+    flexDirection: "row",
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: COLORS.gray100,
+    gap: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  logo: { width: 52, height: 52, borderRadius: 12 },
+  logoFallback: {
+    backgroundColor: COLORS.brandLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  info: { flex: 1 },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 2 },
+  name: { fontWeight: "700", fontSize: 14, color: COLORS.gray900, flex: 1 },
+  verified: { fontSize: 13, color: COLORS.brand },
+  category: {
+    fontSize: 11,
+    color: COLORS.gray500,
+    backgroundColor: COLORS.gray100,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    alignSelf: "flex-start",
+    marginBottom: 4,
+  },
+  description: { fontSize: 12, color: COLORS.gray500, lineHeight: 17 },
+  donationCount: { fontSize: 11, color: COLORS.gray400, marginTop: 4 },
+});

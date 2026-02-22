@@ -1,46 +1,34 @@
 {
-  "name": "donation-mvp",
-  "version": "0.1.0",
-  "private": true,
+  "name": "mobile",
+  "version": "1.0.0",
+  "main": "expo-router/entry",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "db:generate": "prisma generate",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
   },
   "dependencies": {
-    "@auth/prisma-adapter": "^2.7.2",
-    "@prisma/client": "^5.22.0",
-    "@stripe/stripe-js": "^4.8.0",
-    "autoprefixer": "^10.4.24",
-    "lucide-react": "^0.575.0",
-    "next": "^16.1.6",
-    "next-auth": "^5.0.0-beta.25",
-    "nodemailer": "^7.0.7",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "stripe": "^17.3.1",
-    "zod": "^3.23.8"
+    "@react-navigation/native": "^7.1.28",
+    "expo": "~54.0.33",
+    "expo-auth-session": "~7.0.10",
+    "expo-constants": "~18.0.13",
+    "expo-crypto": "~15.0.8",
+    "expo-linking": "~8.0.11",
+    "expo-router": "~6.0.23",
+    "expo-secure-store": "~15.0.8",
+    "expo-status-bar": "~3.0.9",
+    "expo-web-browser": "~15.0.10",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-gesture-handler": "~2.28.0",
+    "react-native-reanimated": "~4.1.1",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0"
   },
   "devDependencies": {
-    "@types/node": "^20",
-    "@types/nodemailer": "^6.4.17",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^8",
-    "eslint-config-next": "15.1.3",
-    "postcss": "^8",
-    "prisma": "^5.22.0",
-    "tailwindcss": "^3.4.1",
-    "tsx": "^4.19.2",
-    "typescript": "^5"
+    "@types/react": "~19.1.0",
+    "typescript": "~5.9.2"
   },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
-  }
+  "private": true
 }

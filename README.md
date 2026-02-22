@@ -1,108 +1,74 @@
-# GiveStream — Venmo for Nonprofits 🤝
+# GiveStream — Venmo for Nonprofits 💚
 
-A social donation platform: donate to verified nonprofits, get tax receipts, and share your impact on a community feed.
+Donate to verified nonprofits, get tax receipts, and share your impact on a social feed.
 
-## Features
+## Project Structure
 
-- **Donate** to nonprofits via Stripe Checkout (one-time payments)
-- **Tax Center** — view donation history by year, export CSV receipts
-- **Social Feed** — share donation moments, like & comment on posts
-- **Nonprofit profiles** — search/filter nonprofits by category
-- **Auth** via Google OAuth (NextAuth v5)
+```
+/                   ← Expo React Native app (iOS + Android)
+  app/              ← Expo Router screens
+    (tabs)/         ← Tab navigation (Feed, Discover, Tax, Profile)
+    nonprofit/      ← Nonprofit detail screen
+    donation/       ← Post-donation success screen
+    auth/           ← Sign-in screen
+  components/       ← Shared UI components (PostCard, NonprofitCard, DonateSheet)
+  context/          ← Auth context
+  lib/              ← API client, utils, colors
+  assets/           ← App icons and images
 
-## Tech Stack
+backend/            ← Next.js API server (deploy to Vercel)
+  app/api/          ← REST API routes
+  prisma/           ← Database schema + seed script
+  lib/              ← Prisma client, Stripe, receipt logic
+```
 
-| Layer | Tech |
-|---|---|
-| Framework | Next.js 16 (App Router) + TypeScript |
-| Database | PostgreSQL + Prisma ORM |
-| Auth | NextAuth v5 + Google OAuth |
-| Payments | Stripe Checkout |
-| Styling | Tailwind CSS |
-| Deploy | Vercel |
+## Running the app
 
-## Local Setup
-
-### 1. Clone & install
+### 1. Start the backend
 
 ```bash
-git clone <repo-url>
-cd donation-mvp
+cd backend
+cp .env.local.example .env.local   # fill in your credentials
 npm install
+npm run db:push     # push Prisma schema to Postgres
+npm run db:seed     # seed 10 nonprofits
+npm run dev         # runs on http://localhost:3000
 ```
 
-### 2. Environment variables
-
-Copy `.env.local.example` and fill in your credentials:
+### 2. Start the mobile app
 
 ```bash
-cp .env.local .env.local.example
+# from root
+npm install
+# set EXPO_PUBLIC_API_URL=http://localhost:3000 in .env
+npm start           # scan QR with Expo Go
 ```
 
-Required variables:
-- `DATABASE_URL` — PostgreSQL connection string
-- `NEXTAUTH_SECRET` — run `openssl rand -base64 32`
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — [Google Cloud Console](https://console.cloud.google.com)
-- `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` — [Stripe Dashboard](https://dashboard.stripe.com)
+## Environment variables
 
-### 3. Database
+### Backend (`backend/.env.local`)
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `NEXTAUTH_SECRET` | Run `openssl rand -base64 32` |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google Cloud Console OAuth |
+| `STRIPE_SECRET_KEY` | Stripe dashboard |
+| `STRIPE_WEBHOOK_SECRET` | From `stripe listen` |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Stripe dashboard |
 
-```bash
-# Push schema to DB (dev)
-npm run db:push
+### Mobile (`.env`)
+| Variable | Description |
+|---|---|
+| `EXPO_PUBLIC_API_URL` | Your backend URL (localhost or deployed) |
+| `EXPO_PUBLIC_GOOGLE_CLIENT_ID` | Google OAuth client ID |
 
-# Or run migrations
-npm run db:migrate
-
-# Seed 10 nonprofits
-npm run db:seed
-```
-
-### 4. Run
-
-```bash
-npm run dev
-```
-
-### 5. Stripe webhook (local testing)
+## Stripe webhook (local dev)
 
 ```bash
 stripe listen --forward-to localhost:3000/api/stripe/webhook
 ```
 
-Copy the webhook secret into `STRIPE_WEBHOOK_SECRET`.
+## Deploying
 
-## API Routes
-
-| Method | Route | Description |
-|---|---|---|
-| GET | `/api/nonprofits` | List/search nonprofits |
-| GET | `/api/nonprofits/:id` | Nonprofit detail + stats |
-| POST | `/api/stripe/create-checkout-session` | Create Stripe session |
-| POST | `/api/stripe/webhook` | Stripe webhook handler |
-| GET | `/api/feed` | Paginated feed posts |
-| POST | `/api/posts` | Create a post |
-| POST | `/api/posts/:id/like` | Toggle like |
-| GET/POST | `/api/posts/:id/comment` | Get/add comments |
-| GET | `/api/donations/:id` | Get single donation |
-| GET | `/api/tax` | Tax summary by year |
-| GET | `/api/tax/export` | CSV export |
-| GET | `/api/users/:username` | User profile + posts |
-
-## Data Model
-
-See [`prisma/schema.prisma`](prisma/schema.prisma) for the full schema.
-
-Key models: `User`, `Nonprofit`, `Donation`, `Receipt`, `Post`, `Like`, `Comment`, `Follow`
-
-## Deployment (Vercel)
-
-1. Push to GitHub
-2. Import into Vercel
-3. Add all environment variables
-4. Set `NEXTAUTH_URL` to your production URL
-5. Configure Stripe webhook endpoint to `https://yourdomain.com/api/stripe/webhook`
-
-## Mobile (iOS/Android)
-
-The API is fully RESTful and session-based. For mobile apps, use the API routes directly with cookie-based auth or migrate to JWT sessions in NextAuth config.
+- **Backend**: Push `backend/` to Vercel, set all env vars
+- **Mobile**: `eas build` with Expo EAS, set `EXPO_PUBLIC_API_URL` to your deployed backend URL

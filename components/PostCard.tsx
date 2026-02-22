@@ -1,176 +1,220 @@
-"use client";
-
-import { useState } from "react";
-import Image from "next/image";
-import Link from "next/link";
-import { Heart, MessageCircle, BadgeCheck, DollarSign } from "lucide-react";
-import { useSession } from "next-auth/react";
-import { formatCents, formatDate } from "@/lib/utils";
+import React, { useState } from "react";
+import {
+  View, Text, Image, TouchableOpacity, TextInput,
+  StyleSheet, Alert,
+} from "react-native";
+import { useRouter } from "expo-router";
+import { api, FeedPost, Comment } from "@/lib/api";
+import { formatCents, timeAgo, COLORS } from "@/lib/utils";
+import { useAuth } from "@/context/AuthContext";
 
 interface PostCardProps {
-  post: {
-    id: string;
-    caption: string;
-    imageUrl?: string | null;
-    createdAt: string;
-    likeCount: number;
-    commentCount: number;
-    viewerLiked: boolean;
-    user: { id: string; name?: string | null; username: string; avatarUrl?: string | null };
-    nonprofit: { id: string; name: string; logoUrl?: string | null; verified: boolean };
-    donation?: { amountCents: number; currency: string } | null;
-  };
+  post: FeedPost;
 }
 
 export function PostCard({ post }: PostCardProps) {
-  const { data: session } = useSession();
+  const router = useRouter();
+  const { user } = useAuth();
   const [liked, setLiked] = useState(post.viewerLiked);
   const [likeCount, setLikeCount] = useState(post.likeCount);
   const [showComments, setShowComments] = useState(false);
-  const [comments, setComments] = useState<{ id: string; body: string; user: { name?: string | null; username: string } }[]>([]);
-  const [commentBody, setCommentBody] = useState("");
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentText, setCommentText] = useState("");
   const [loadingComments, setLoadingComments] = useState(false);
 
   async function toggleLike() {
-    if (!session) return;
+    if (!user) { router.push("/auth/signin"); return; }
     setLiked(!liked);
     setLikeCount(liked ? likeCount - 1 : likeCount + 1);
-    await fetch(`/api/posts/${post.id}/like`, { method: "POST" });
+    try { await api.posts.like(post.id); } catch { /* optimistic */ }
   }
 
   async function loadComments() {
     if (showComments) { setShowComments(false); return; }
     setLoadingComments(true);
-    const res = await fetch(`/api/posts/${post.id}/comment`);
-    const data = await res.json();
-    setComments(data);
-    setShowComments(true);
-    setLoadingComments(false);
+    try {
+      const data = await api.posts.getComments(post.id);
+      setComments(data);
+    } catch (e) {
+      Alert.alert("Error", "Could not load comments");
+    } finally {
+      setLoadingComments(false);
+      setShowComments(true);
+    }
   }
 
-  async function submitComment(e: React.FormEvent) {
-    e.preventDefault();
-    if (!commentBody.trim() || !session) return;
-    const res = await fetch(`/api/posts/${post.id}/comment`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ body: commentBody }),
-    });
-    const comment = await res.json();
-    setComments([...comments, comment]);
-    setCommentBody("");
+  async function submitComment() {
+    if (!commentText.trim() || !user) return;
+    try {
+      const comment = await api.posts.addComment(post.id, commentText.trim());
+      setComments([...comments, comment]);
+      setCommentText("");
+    } catch {
+      Alert.alert("Error", "Could not post comment");
+    }
   }
 
   return (
-    <article className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+    <View style={styles.card}>
       {/* Header */}
-      <div className="flex items-center justify-between p-4">
-        <div className="flex items-center gap-3">
-          <Link href={`/u/${post.user.username}`}>
-            {post.user.avatarUrl ? (
-              <Image
-                src={post.user.avatarUrl}
-                alt={post.user.name ?? ""}
-                width={36}
-                height={36}
-                className="rounded-full"
-              />
-            ) : (
-              <div className="w-9 h-9 rounded-full bg-brand-100 flex items-center justify-center text-brand-700 font-bold text-sm">
-                {post.user.name?.[0]?.toUpperCase() ?? "?"}
-              </div>
-            )}
-          </Link>
-          <div>
-            <Link href={`/u/${post.user.username}`} className="font-semibold text-sm text-gray-900 hover:text-brand-600">
-              {post.user.name ?? post.user.username}
-            </Link>
-            <p className="text-xs text-gray-400">{formatDate(post.createdAt)}</p>
-          </div>
-        </div>
-      </div>
+      <TouchableOpacity
+        style={styles.header}
+        onPress={() => router.push(`/profile/${post.user.username}` as never)}
+      >
+        {post.user.avatarUrl ? (
+          <Image source={{ uri: post.user.avatarUrl }} style={styles.avatar} />
+        ) : (
+          <View style={[styles.avatar, styles.avatarFallback]}>
+            <Text style={styles.avatarText}>{post.user.name?.[0]?.toUpperCase() ?? "?"}</Text>
+          </View>
+        )}
+        <View>
+          <Text style={styles.userName}>{post.user.name ?? post.user.username}</Text>
+          <Text style={styles.timeAgo}>{timeAgo(post.createdAt)}</Text>
+        </View>
+      </TouchableOpacity>
 
       {/* Donation badge */}
       {post.donation && (
-        <div className="mx-4 mb-3 flex items-center gap-2 bg-brand-50 rounded-xl px-3 py-2">
-          <DollarSign className="w-4 h-4 text-brand-500" />
-          <span className="text-sm text-brand-700 font-medium">
-            Donated {formatCents(post.donation.amountCents, post.donation.currency)} to{" "}
-          </span>
-          <Link href={`/n/${post.nonprofit.id}`} className="flex items-center gap-1 text-sm font-semibold text-brand-700 hover:text-brand-900">
-            {post.nonprofit.name}
-            {post.nonprofit.verified && <BadgeCheck className="w-3.5 h-3.5" />}
-          </Link>
-        </div>
+        <TouchableOpacity
+          style={styles.donationBadge}
+          onPress={() => router.push(`/nonprofit/${post.nonprofit.id}` as never)}
+        >
+          <Text style={styles.donationText}>
+            💚 Donated {formatCents(post.donation.amountCents, post.donation.currency)} to{" "}
+            <Text style={styles.nonprofitName}>{post.nonprofit.name}</Text>
+            {post.nonprofit.verified ? " ✓" : ""}
+          </Text>
+        </TouchableOpacity>
       )}
 
       {/* Image */}
       {post.imageUrl && (
-        <div className="relative w-full aspect-square bg-gray-100">
-          <Image src={post.imageUrl} alt="Post image" fill className="object-cover" />
-        </div>
+        <Image
+          source={{ uri: post.imageUrl }}
+          style={styles.postImage}
+          resizeMode="cover"
+        />
       )}
 
       {/* Actions */}
-      <div className="px-4 pt-3 pb-1 flex items-center gap-4">
-        <button
-          onClick={toggleLike}
-          className={`flex items-center gap-1.5 transition-colors ${liked ? "text-red-500" : "text-gray-400 hover:text-red-400"}`}
-        >
-          <Heart className={`w-5 h-5 ${liked ? "fill-red-500" : ""}`} />
-          <span className="text-sm font-medium">{likeCount}</span>
-        </button>
-        <button
-          onClick={loadComments}
-          className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          <MessageCircle className="w-5 h-5" />
-          <span className="text-sm font-medium">{post.commentCount}</span>
-        </button>
-      </div>
+      <View style={styles.actions}>
+        <TouchableOpacity style={styles.actionBtn} onPress={toggleLike}>
+          <Text style={{ fontSize: 20 }}>{liked ? "❤️" : "🤍"}</Text>
+          <Text style={[styles.actionCount, liked && styles.actionCountLiked]}>{likeCount}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionBtn} onPress={loadComments}>
+          <Text style={{ fontSize: 20 }}>💬</Text>
+          <Text style={styles.actionCount}>{post.commentCount}</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Caption */}
-      <div className="px-4 pb-3">
-        <p className="text-sm text-gray-800">
-          <span className="font-semibold mr-1">{post.user.name ?? post.user.username}</span>
-          {post.caption}
-        </p>
-      </div>
+      <View style={styles.captionRow}>
+        <Text style={styles.captionUser}>{post.user.name ?? post.user.username} </Text>
+        <Text style={styles.caption}>{post.caption}</Text>
+      </View>
 
-      {/* Comments */}
+      {/* Comments section */}
       {showComments && (
-        <div className="border-t border-gray-50 px-4 py-3 space-y-2">
+        <View style={styles.commentsSection}>
           {loadingComments ? (
-            <p className="text-xs text-gray-400">Loading...</p>
+            <Text style={styles.loadingText}>Loading...</Text>
           ) : (
             <>
               {comments.map((c) => (
-                <p key={c.id} className="text-sm text-gray-700">
-                  <span className="font-semibold mr-1">{c.user.name ?? c.user.username}</span>
-                  {c.body}
-                </p>
+                <View key={c.id} style={styles.commentRow}>
+                  <Text style={styles.commentUser}>{c.user.name ?? c.user.username} </Text>
+                  <Text style={styles.commentBody}>{c.body}</Text>
+                </View>
               ))}
-              {session && (
-                <form onSubmit={submitComment} className="flex gap-2 mt-2">
-                  <input
-                    value={commentBody}
-                    onChange={(e) => setCommentBody(e.target.value)}
+              {user && (
+                <View style={styles.commentInput}>
+                  <TextInput
+                    value={commentText}
+                    onChangeText={setCommentText}
                     placeholder="Add a comment..."
-                    className="flex-1 text-sm border border-gray-200 rounded-full px-3 py-1.5 focus:outline-none focus:border-brand-400"
+                    placeholderTextColor={COLORS.gray400}
+                    style={styles.commentTextField}
+                    returnKeyType="send"
+                    onSubmitEditing={submitComment}
                   />
-                  <button
-                    type="submit"
-                    disabled={!commentBody.trim()}
-                    className="text-sm font-semibold text-brand-600 disabled:text-gray-300"
-                  >
-                    Post
-                  </button>
-                </form>
+                  <TouchableOpacity onPress={submitComment} disabled={!commentText.trim()}>
+                    <Text style={[styles.postBtn, !commentText.trim() && styles.postBtnDisabled]}>
+                      Post
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </>
           )}
-        </div>
+        </View>
       )}
-    </article>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  card: {
+    backgroundColor: COLORS.white,
+    marginBottom: 8,
+    borderRadius: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    gap: 10,
+  },
+  avatar: { width: 36, height: 36, borderRadius: 18 },
+  avatarFallback: {
+    backgroundColor: COLORS.brandLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: { color: COLORS.brand, fontWeight: "700", fontSize: 14 },
+  userName: { fontWeight: "700", fontSize: 13, color: COLORS.gray900 },
+  timeAgo: { fontSize: 11, color: COLORS.gray400, marginTop: 1 },
+  donationBadge: {
+    marginHorizontal: 12,
+    marginBottom: 8,
+    backgroundColor: "#fdf2f8",
+    borderRadius: 10,
+    padding: 10,
+  },
+  donationText: { fontSize: 13, color: COLORS.brandDark },
+  nonprofitName: { fontWeight: "700" },
+  postImage: { width: "100%", aspectRatio: 1 },
+  actions: { flexDirection: "row", paddingHorizontal: 12, paddingVertical: 8, gap: 16 },
+  actionBtn: { flexDirection: "row", alignItems: "center", gap: 4 },
+  actionCount: { fontSize: 13, color: COLORS.gray600, fontWeight: "600" },
+  actionCountLiked: { color: COLORS.red },
+  captionRow: { flexDirection: "row", flexWrap: "wrap", paddingHorizontal: 12, paddingBottom: 12 },
+  captionUser: { fontWeight: "700", fontSize: 13, color: COLORS.gray900 },
+  caption: { fontSize: 13, color: COLORS.gray800, flex: 1 },
+  commentsSection: { borderTopWidth: 1, borderTopColor: COLORS.gray100, padding: 12 },
+  loadingText: { color: COLORS.gray400, fontSize: 12 },
+  commentRow: { flexDirection: "row", flexWrap: "wrap", marginBottom: 4 },
+  commentUser: { fontWeight: "700", fontSize: 12, color: COLORS.gray900 },
+  commentBody: { fontSize: 12, color: COLORS.gray700 },
+  commentInput: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    gap: 8,
+  },
+  commentTextField: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: COLORS.gray200,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    fontSize: 13,
+    color: COLORS.gray900,
+  },
+  postBtn: { fontSize: 13, fontWeight: "700", color: COLORS.brand },
+  postBtnDisabled: { color: COLORS.gray300 },
+});
