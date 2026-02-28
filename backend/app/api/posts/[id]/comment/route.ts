@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getSession } from "@/lib/getSession";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
@@ -28,7 +28,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await auth();
+  const session = await getSession(req);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -38,6 +38,9 @@ export async function POST(
   const post = await prisma.post.findFirst({ where: { id: postId, isDeleted: false } });
   if (!post) {
     return NextResponse.json({ error: "Post not found" }, { status: 404 });
+  }
+  if (!post.allowComments) {
+    return NextResponse.json({ error: "Comments are disabled on this post" }, { status: 403 });
   }
 
   const body = await req.json();

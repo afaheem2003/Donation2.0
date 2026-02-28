@@ -50,6 +50,23 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Payment Sheet flow (mobile native)
+  if (event.type === "payment_intent.succeeded") {
+    const pi = event.data.object as Stripe.PaymentIntent;
+    const donationId = pi.metadata?.donationId;
+    if (donationId) {
+      try {
+        const donation = await prisma.donation.update({
+          where: { id: donationId },
+          data: { status: "SUCCEEDED", donatedAt: new Date(event.created * 1000) },
+        });
+        await createReceiptForDonation(donation.id);
+      } catch (err) {
+        console.error("Error processing payment_intent.succeeded:", err);
+      }
+    }
+  }
+
   if (event.type === "checkout.session.expired" || event.type === "payment_intent.payment_failed") {
     const session = event.data.object as Stripe.Checkout.Session;
     const donationId = session.metadata?.donationId;

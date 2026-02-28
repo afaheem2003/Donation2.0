@@ -34,6 +34,8 @@ export async function GET(req: NextRequest) {
         website: true,
         logoUrl: true,
         verified: true,
+        latitude: true,
+        longitude: true,
         _count: { select: { donations: { where: { status: "SUCCEEDED" } } } },
       },
     }),

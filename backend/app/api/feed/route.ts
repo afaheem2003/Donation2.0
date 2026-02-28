@@ -1,15 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getSession } from "@/lib/getSession";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
+  const session = await getSession(req);
   const { searchParams } = new URL(req.url);
   const cursor = searchParams.get("cursor");
   const limit = 10;
 
+  // When logged in, filter by followed users and followed nonprofits.
+  // Guests see all posts (explore mode).
+  let where: Parameters<typeof prisma.post.findMany>[0]["where"] = { isDeleted: false };
+
+  if (session?.user?.id) {
+    const [followingIds, npFollowingIds] = await Promise.all([
+      prisma.follow.findMany({
+        where: { followerId: session.user.id },
+        select: { followingId: true },
+      }).then((rows) => rows.map((r) => r.followingId)),
+      prisma.nonprofitFollow.findMany({
+        where: { userId: session.user.id },
+        select: { nonprofitId: true },
+      }).then((rows) => rows.map((r) => r.nonprofitId)),
+    ]);
+
+    const orClauses: NonNullable<typeof where>[] = [
+      ...(followingIds.length ? [{ userId: { in: followingIds } }] : []),
+      ...(npFollowingIds.length ? [{ nonprofitId: { in: npFollowingIds } }] : []),
+    ];
+
+    if (!orClauses.length) {
+      // User follows nobody — return empty feed
+      return NextResponse.json({ posts: [], nextCursor: undefined });
+    }
+
+    where = { isDeleted: false, OR: orClauses };
+  }
+
   const posts = await prisma.post.findMany({
-    where: { isDeleted: false },
+    where,
     take: limit + 1,
     ...(cursor && { cursor: { id: cursor }, skip: 1 }),
     orderBy: { createdAt: "desc" },

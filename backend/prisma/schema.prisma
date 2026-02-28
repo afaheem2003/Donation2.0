@@ -57,8 +57,9 @@ model User {
   id        String   @id @default(cuid())
   name      String?
   email     String   @unique
-  username  String   @unique @default(cuid())
-  avatarUrl String?
+  username    String   @unique @default(cuid())
+  usernameSet Boolean  @default(false)
+  avatarUrl   String?
   role      UserRole @default(DONOR)
   createdAt DateTime @default(now())
 
@@ -67,14 +68,17 @@ model User {
   accounts      Account[]
   sessions      Session[]
 
+  yearlyGoalCents Int?
+
   // App relations
   nonprofitAdmins NonprofitAdmin[]
   donations       Donation[]
   posts           Post[]
   likes           Like[]
   comments        Comment[]
-  following       Follow[]         @relation("follower")
-  followers       Follow[]         @relation("following")
+  following          Follow[]           @relation("follower")
+  followers          Follow[]           @relation("following")
+  nonprofitFollows   NonprofitFollow[]
 }
 
 enum NonprofitCategory {
@@ -99,11 +103,26 @@ model Nonprofit {
   website     String?
   logoUrl     String?
   verified    Boolean           @default(false)
+  latitude    Float?
+  longitude   Float?
   createdAt   DateTime          @default(now())
 
-  admins    NonprofitAdmin[]
-  donations Donation[]
-  posts     Post[]
+  admins           NonprofitAdmin[]
+  donations        Donation[]
+  posts            Post[]
+  followers        NonprofitFollow[]
+}
+
+model NonprofitFollow {
+  id          String   @id @default(cuid())
+  userId      String
+  nonprofitId String
+  createdAt   DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nonprofit Nonprofit @relation(fields: [nonprofitId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, nonprofitId])
 }
 
 enum AdminRole {
@@ -133,7 +152,7 @@ enum DonationStatus {
 
 model Donation {
   id                       String         @id @default(cuid())
-  userId                   String
+  userId                   String?
   nonprofitId              String
   amountCents              Int
   currency                 String         @default("usd")
@@ -143,7 +162,7 @@ model Donation {
   donatedAt                DateTime?
   createdAt                DateTime       @default(now())
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
   nonprofit Nonprofit @relation(fields: [nonprofitId], references: [id], onDelete: Cascade)
   receipt   Receipt?
   posts     Post[]
@@ -167,9 +186,10 @@ model Post {
   nonprofitId String
   donationId  String?
   caption     String   @db.Text
-  imageUrl    String?
-  isDeleted   Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  imageUrl      String?
+  isDeleted     Boolean  @default(false)
+  allowComments Boolean  @default(true)
+  createdAt     DateTime @default(now())
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   nonprofit Nonprofit @relation(fields: [nonprofitId], references: [id], onDelete: Cascade)

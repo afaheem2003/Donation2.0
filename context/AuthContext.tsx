@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
-import { api, SessionUser, clearSessionToken, setSessionToken } from "@/lib/api";
+import { api, SessionUser, clearSessionToken, setSessionToken, getSessionToken } from "@/lib/api";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -41,29 +41,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshSession]);
 
   async function signIn() {
-    // Open the Next.js sign-in page in a web browser
-    // NextAuth handles the OAuth flow and sets a session cookie
-    const redirectUrl = Linking.createURL("/auth/callback");
-    const authUrl = `${BASE_URL}/api/auth/signin/google?callbackUrl=${encodeURIComponent(redirectUrl)}`;
+    const expoRedirectUrl = Linking.createURL("/auth/callback");
+    const relayUrl = `${BASE_URL}/api/auth/mobile-callback?redirect=${encodeURIComponent(expoRedirectUrl)}`;
+    const authUrl = `${BASE_URL}/api/auth/google-signin?callbackUrl=${encodeURIComponent(relayUrl)}`;
 
-    const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
+    function extractToken(url: string): string | null {
+      const match = url.match(/[?&]token=([^&#]+)/);
+      return match ? decodeURIComponent(match[1]) : null;
+    }
 
-    if (result.type === "success") {
-      // Extract session token from the redirect URL if available
-      const url = result.url;
-      const params = new URL(url).searchParams;
-      const token = params.get("token");
+    async function applyToken(url: string) {
+      const token = extractToken(url);
       if (token) {
         await setSessionToken(token);
       }
-      // Refresh session state
       await refreshSession();
+    }
+
+    let linkHandled = false;
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      if (!linkHandled && url.includes("auth/callback")) {
+        linkHandled = true;
+        subscription.remove();
+        applyToken(url);
+      }
+    });
+
+    const result = await WebBrowser.openAuthSessionAsync(authUrl, expoRedirectUrl, {
+      preferEphemeralSession: true,
+    });
+
+    subscription.remove();
+
+    if (!linkHandled) {
+      if (result.type === "success") {
+        await applyToken(result.url);
+      }
     }
   }
 
   async function signOut() {
     try {
-      await fetch(`${BASE_URL}/api/auth/signout`, { method: "POST", credentials: "include" });
+      await fetch(`${BASE_URL}/api/auth/signout`, { method: "POST" });
     } catch {
       // ignore
     }

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getSession } from "@/lib/getSession";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ username: string }> }
 ) {
-  const session = await auth();
+  const session = await getSession(req);
   const { username } = await params;
 
   const user = await prisma.user.findUnique({
@@ -18,7 +18,7 @@ export async function GET(
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const [posts, donationStats] = await Promise.all([
+  const [posts, donationStats, followerCount, followingCount, viewerFollowing] = await Promise.all([
     prisma.post.findMany({
       where: { userId: user.id, isDeleted: false },
       orderBy: { createdAt: "desc" },
@@ -38,6 +38,14 @@ export async function GET(
       _sum: { amountCents: true },
       _count: { id: true },
     }),
+    prisma.follow.count({ where: { followingId: user.id } }),
+    prisma.follow.count({ where: { followerId: user.id } }),
+    session?.user?.id
+      ? prisma.follow.findUnique({
+          where: { followerId_followingId: { followerId: session.user.id, followingId: user.id } },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
   ]);
 
   const formattedPosts = posts.map((post) => ({
@@ -54,5 +62,8 @@ export async function GET(
     posts: formattedPosts,
     totalDonatedCents: donationStats._sum.amountCents ?? 0,
     donationCount: donationStats._count.id,
+    followerCount,
+    followingCount,
+    viewerFollowing: !!viewerFollowing,
   });
 }

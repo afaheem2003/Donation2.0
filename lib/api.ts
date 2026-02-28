@@ -28,14 +28,22 @@ async function request<T>(
   };
 
   if (sessionToken) {
-    headers["Cookie"] = `next-auth.session-token=${sessionToken}`;
+    headers["Authorization"] = `Bearer ${sessionToken}`;
   }
 
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers,
-    credentials: "include",
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -47,7 +55,7 @@ async function request<T>(
   if (contentType.includes("application/json")) {
     return res.json() as Promise<T>;
   }
-  return res.text() as unknown as Promise<T>;
+  return res.text() as unknown as T;
 }
 
 // ─── Nonprofits ──────────────────────────────────────────────────────────────
@@ -61,7 +69,11 @@ export interface Nonprofit {
   website?: string | null;
   logoUrl?: string | null;
   verified: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
   totalRaisedCents?: number;
+  followerCount?: number;
+  viewerFollowing?: boolean;
   _count?: { donations: number; posts: number };
 }
 
@@ -79,6 +91,11 @@ export const api = {
       );
     },
     get: (id: string) => request<Nonprofit>(`/api/nonprofits/${id}`),
+    follow: (id: string) =>
+      request<{ following: boolean; followerCount: number }>(
+        `/api/nonprofits/${id}/follow`,
+        { method: "POST" }
+      ),
   },
 
   feed: {
@@ -89,8 +106,12 @@ export const api = {
   },
 
   posts: {
-    create: (data: { nonprofitId: string; donationId?: string; caption: string; imageUrl?: string }) =>
+    create: (data: { nonprofitId: string; donationId?: string; caption: string; imageUrl?: string; allowComments?: boolean }) =>
       request<FeedPost>("/api/posts", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: { caption?: string; allowComments?: boolean }) =>
+      request<PostSummary>(`/api/posts/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      request<{ deleted: boolean }>(`/api/posts/${id}`, { method: "DELETE" }),
     like: (id: string) =>
       request<{ liked: boolean }>(`/api/posts/${id}/like`, { method: "POST" }),
     getComments: (id: string) => request<Comment[]>(`/api/posts/${id}/comment`),
@@ -103,6 +124,11 @@ export const api = {
 
   donations: {
     get: (id: string) => request<DonationDetail>(`/api/donations/${id}`),
+    mock: (nonprofitId: string, amountCents: number) =>
+      request<{ donationId: string }>("/api/donations/mock", {
+        method: "POST",
+        body: JSON.stringify({ nonprofitId, amountCents }),
+      }),
   },
 
   stripe: {
@@ -111,6 +137,11 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ nonprofitId, amountCents }),
       }),
+    createPaymentIntent: (nonprofitId: string, amountCents: number) =>
+      request<{ paymentIntent: string; donationId: string }>(
+        "/api/stripe/payment-intent",
+        { method: "POST", body: JSON.stringify({ nonprofitId, amountCents }) }
+      ),
   },
 
   tax: {
@@ -124,19 +155,54 @@ export const api = {
   users: {
     profile: (username: string) =>
       request<UserProfile>(`/api/users/${username}`),
+    follow: (username: string) =>
+      request<{ following: boolean; followerCount: number }>(
+        `/api/users/${username}/follow`,
+        { method: "POST" }
+      ),
+    goal: {
+      get: () =>
+        request<{ yearlyGoalCents: number | null; totalDonatedThisYearCents: number; year: number }>(
+          "/api/users/me/goal"
+        ),
+      set: (yearlyGoalCents: number) =>
+        request<{ yearlyGoalCents: number | null; totalDonatedThisYearCents: number; year: number }>(
+          "/api/users/me/goal",
+          { method: "PATCH", body: JSON.stringify({ yearlyGoalCents }) }
+        ),
+    },
+    myDonations: () =>
+      request<{ donations: MyDonation[] }>("/api/users/me/donations"),
+    setUsername: (username: string) =>
+      request<{ username: string; usernameSet: boolean }>(
+        "/api/users/me/username",
+        { method: "PATCH", body: JSON.stringify({ username }) }
+      ),
+    search: (q: string) =>
+      request<{ users: UserSearchResult[] }>(
+        `/api/users/search?q=${encodeURIComponent(q)}`
+      ),
   },
 
   auth: {
-    session: () => request<{ user?: SessionUser } | null>("/api/auth/session"),
+    session: () => request<{ user: SessionUser | null }>("/api/me"),
   },
 };
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+export interface PostSummary {
+  id: string;
+  caption: string;
+  allowComments: boolean;
+  createdAt: string;
+}
+
 export interface FeedPost {
   id: string;
   caption: string;
   imageUrl?: string | null;
+  allowComments: boolean;
   createdAt: string;
   likeCount: number;
   commentCount: number;
@@ -170,6 +236,23 @@ export interface TaxDonation {
   donatedAt: string;
   nonprofit: { id: string; name: string; ein: string; logoUrl?: string | null };
   receipt: { receiptNumber: string; taxYear: number; legalText: string } | null;
+  posts: PostSummary[];
+}
+
+export interface MyDonation {
+  id: string;
+  amountCents: number;
+  currency: string;
+  donatedAt: string;
+  nonprofit: { id: string; name: string; logoUrl?: string | null };
+  posts: PostSummary[];
+}
+
+export interface UserSearchResult {
+  id: string;
+  name?: string | null;
+  username: string;
+  avatarUrl?: string | null;
 }
 
 export interface SessionUser {
@@ -179,6 +262,7 @@ export interface SessionUser {
   image?: string | null;
   username: string;
   role: string;
+  usernameSet: boolean;
 }
 
 export interface UserProfile {
@@ -186,4 +270,7 @@ export interface UserProfile {
   posts: FeedPost[];
   totalDonatedCents: number;
   donationCount: number;
+  followerCount: number;
+  followingCount: number;
+  viewerFollowing: boolean;
 }

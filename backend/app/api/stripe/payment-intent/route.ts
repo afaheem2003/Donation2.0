@@ -1,0 +1,64 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/getSession";
+import { prisma } from "@/lib/prisma";
+import { stripe } from "@/lib/stripe";
+import { z } from "zod";
+
+const schema = z.object({
+  nonprofitId: z.string(),
+  amountCents: z.number().int().min(100),
+});
+
+export async function POST(req: NextRequest) {
+  // Auth is optional — guests can donate too
+  const session = await getSession(req);
+
+  const body = await req.json();
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+
+  const { nonprofitId, amountCents } = parsed.data;
+
+  const nonprofit = await prisma.nonprofit.findUnique({
+    where: { id: nonprofitId },
+    select: { id: true, name: true, ein: true },
+  });
+  if (!nonprofit) {
+    return NextResponse.json({ error: "Nonprofit not found" }, { status: 404 });
+  }
+
+  // Create pending donation — userId is null for guests
+  const donation = await prisma.donation.create({
+    data: {
+      userId: session?.user?.id ?? null,
+      nonprofitId,
+      amountCents,
+      currency: "usd",
+      status: "PENDING",
+    },
+  });
+
+  const paymentIntent = await stripe.paymentIntents.create({
+    amount: amountCents,
+    currency: "usd",
+    automatic_payment_methods: { enabled: true },
+    description: `Donation to ${nonprofit.name} (EIN: ${nonprofit.ein})`,
+    metadata: {
+      donationId: donation.id,
+      nonprofitId,
+      userId: session?.user?.id ?? "guest",
+    },
+  });
+
+  await prisma.donation.update({
+    where: { id: donation.id },
+    data: { stripePaymentIntentId: paymentIntent.id },
+  });
+
+  return NextResponse.json({
+    paymentIntent: paymentIntent.client_secret,
+    donationId: donation.id,
+  });
+}

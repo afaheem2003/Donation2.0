@@ -2,20 +2,25 @@ import React from "react";
 import {
   View, Text, TouchableOpacity, StyleSheet, ActivityIndicator,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
 import { COLORS } from "@/lib/utils";
 
 export default function SignInScreen() {
-  const { signIn, loading } = useAuth();
+  const { user, signIn, loading } = useAuth();
   const router = useRouter();
   const [signingIn, setSigningIn] = React.useState(false);
+
+  // Auto-close as soon as login succeeds.
+  React.useEffect(() => {
+    if (user) router.back();
+  }, [user, router]);
 
   async function handleSignIn() {
     setSigningIn(true);
     try {
       await signIn();
-      router.back();
     } catch (e) {
       console.error(e);
     } finally {
@@ -25,10 +30,13 @@ export default function SignInScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.logo}>💚</Text>
+      <View style={styles.logoCircle}>
+        <Ionicons name="heart" size={36} color={COLORS.brand} />
+      </View>
+
       <Text style={styles.title}>Welcome to GiveStream</Text>
       <Text style={styles.subtitle}>
-        Sign in to donate to nonprofits, track your tax receipts, and share your impact.
+        Donate to verified nonprofits, get tax receipts, and share your impact.
       </Text>
 
       <TouchableOpacity
@@ -40,7 +48,9 @@ export default function SignInScreen() {
           <ActivityIndicator color={COLORS.gray700} />
         ) : (
           <>
-            <Text style={styles.googleIcon}>G</Text>
+            <View style={styles.googleIconCircle}>
+              <Text style={styles.googleG}>G</Text>
+            </View>
             <Text style={styles.googleBtnText}>Continue with Google</Text>
           </>
         )}
@@ -65,8 +75,22 @@ const styles = StyleSheet.create({
     padding: 32,
     backgroundColor: COLORS.white,
   },
-  logo: { fontSize: 56, marginBottom: 16 },
-  title: { fontSize: 26, fontWeight: "800", color: COLORS.gray900, textAlign: "center", marginBottom: 10 },
+  logoCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.brandLight,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 24,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: COLORS.gray900,
+    textAlign: "center",
+    marginBottom: 10,
+  },
   subtitle: {
     fontSize: 15,
     color: COLORS.gray500,
@@ -82,21 +106,29 @@ const styles = StyleSheet.create({
     width: "100%",
     borderWidth: 1,
     borderColor: COLORS.gray200,
-    borderRadius: 100,
-    paddingVertical: 16,
+    borderRadius: 14,
+    paddingVertical: 15,
     backgroundColor: COLORS.white,
     marginBottom: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
   },
-  googleIcon: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+  googleIconCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     backgroundColor: "#4285F4",
-    textAlign: "center",
-    lineHeight: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  googleG: {
     color: COLORS.white,
     fontWeight: "800",
     fontSize: 13,
+    lineHeight: 18,
   },
   googleBtnText: { fontSize: 16, fontWeight: "600", color: COLORS.gray700 },
   cancelBtn: { paddingVertical: 14 },
