@@ -198,6 +198,8 @@ export const api = {
         method: "PATCH",
         body: JSON.stringify(data),
       }),
+    deleteAccount: () =>
+      request<void>("/api/users/me", { method: "DELETE" }),
   },
 
   auth: {

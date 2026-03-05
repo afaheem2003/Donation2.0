@@ -234,6 +234,42 @@ export default function ProfileScreen() {
             <Text style={styles.taxBtnText}>Change username</Text>
             <Ionicons name="chevron-forward" size={14} color={COLORS.gray300} style={{ marginLeft: "auto" }} />
           </TouchableOpacity>
+
+          {__DEV__ && (
+            <>
+              <View style={styles.settingsDivider} />
+              <TouchableOpacity
+                style={styles.taxBtn}
+                onPress={() => {
+                  Alert.alert(
+                    "Delete Account",
+                    "This will permanently delete your account and all your data. This cannot be undone.",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Delete",
+                        style: "destructive",
+                        onPress: async () => {
+                          try {
+                            await api.users.deleteAccount();
+                            await signOut();
+                          } catch {
+                            Alert.alert("Error", "Could not delete account. Please try again.");
+                          }
+                        },
+                      },
+                    ]
+                  );
+                }}
+              >
+                <Ionicons name="trash-outline" size={16} color={COLORS.red} />
+                <Text style={[styles.taxBtnText, { color: COLORS.red }]}>Delete Account</Text>
+                <View style={styles.devBadge}>
+                  <Text style={styles.devBadgeText}>DEV</Text>
+                </View>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
 
         {/* ── Yearly Goal Card ── */}
@@ -580,6 +616,14 @@ const styles = StyleSheet.create({
   },
   taxBtnText: { fontSize: 13, fontWeight: "600", color: COLORS.gray700 },
   settingsDivider: { height: 1, backgroundColor: COLORS.gray100, marginHorizontal: 2 },
+  devBadge: {
+    marginLeft: "auto",
+    backgroundColor: "#FFF3CD",
+    borderRadius: 5,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  devBadgeText: { fontSize: 10, fontWeight: "800", color: "#B45309", letterSpacing: 0.5 },
 
   // Goal — empty state
   goalEmpty: {
