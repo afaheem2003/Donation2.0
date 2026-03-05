@@ -4,6 +4,7 @@ import {
   StyleSheet, Modal, Alert, ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useStripe } from "@stripe/stripe-react-native";
 import { api } from "@/lib/api";
 import { COLORS } from "@/lib/utils";
 import { useAuth } from "@/context/AuthContext";
@@ -21,6 +22,7 @@ interface Props {
 export function DonateSheet({ visible, nonprofitId, nonprofitName, onClose }: Props) {
   const { user } = useAuth();
   const router = useRouter();
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const [selectedAmount, setSelectedAmount] = useState(25);
   const [customAmount, setCustomAmount] = useState("");
   const [loading, setLoading] = useState(false);
@@ -44,7 +46,34 @@ export function DonateSheet({ visible, nonprofitId, nonprofitName, onClose }: Pr
     submittingRef.current = true;
     setLoading(true);
     try {
-      const { donationId } = await api.donations.mock(nonprofitId, amountCents);
+      // 1. Create PaymentIntent on server — returns a clientSecret
+      const { paymentIntent: clientSecret, donationId } =
+        await api.stripe.createPaymentIntent(nonprofitId, amountCents);
+
+      // 2. Initialise the Payment Sheet (card + Apple Pay + ACH if enabled in dashboard)
+      const { error: initError } = await initPaymentSheet({
+        paymentIntentClientSecret: clientSecret,
+        merchantDisplayName: "GiveStream",
+        // Required so ACH (us_bank_account) can be offered — ACH payments
+        // enter a "processing" state for 1-5 business days before succeeding.
+        allowsDelayedPaymentMethods: true,
+        returnURL: "givestream://payment-return",
+      });
+      if (initError) throw new Error(initError.message);
+
+      // 3. Present the sheet — user picks card / Apple Pay / bank account
+      const { error: presentError } = await presentPaymentSheet();
+      if (presentError) {
+        // "Canceled" means the user dismissed — not an error to surface.
+        if (presentError.code !== "Canceled") {
+          throw new Error(presentError.message);
+        }
+        submittingRef.current = false;
+        return;
+      }
+
+      // 4. Payment accepted — navigate to success screen.
+      // The server will mark the donation SUCCEEDED via the webhook.
       onClose();
       router.push({ pathname: "/donation/success", params: { donation_id: donationId } });
     } catch (e) {

@@ -37,7 +37,7 @@ export function DonateModal({ nonprofitId, nonprofitName, onClose }: DonateModal
     setError("");
 
     try {
-      const res = await fetch("/api/donations/mock", {
+      const res = await fetch("/api/stripe/create-checkout-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nonprofitId, amountCents }),
@@ -46,7 +46,8 @@ export function DonateModal({ nonprofitId, nonprofitName, onClose }: DonateModal
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to process donation");
 
-      window.location.href = `/donation/success?donation_id=${data.donationId}`;
+      // Redirect to Stripe-hosted checkout (card + Apple Pay + ACH)
+      window.location.href = data.url;
     } catch (err) {
       setError((err as Error).message);
       setLoading(false);

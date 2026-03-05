@@ -2,9 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, ActivityIndicator, Alert, Image, Animated,
-  KeyboardAvoidingView, Platform, Switch, Linking,
+  KeyboardAvoidingView, Platform, Switch, Keyboard, TouchableWithoutFeedback,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useStripe } from "@stripe/stripe-react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
@@ -14,34 +15,40 @@ import { COLORS, formatCents } from "@/lib/utils";
 
 type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
 type Step = "amount" | "share";
+type PayMethod = "card" | "apple_pay" | "us_bank_account";
 
-interface PaymentMethod {
-  id: string;
-  brand: "visa" | "mastercard" | "amex" | "apple_pay";
-  last4?: string;
-  exp?: string;
+const PAY_METHODS: Array<{
+  id: PayMethod;
+  icon: IoniconName;
   label: string;
-}
-
-const MOCK_PAYMENT_METHODS: PaymentMethod[] = [
-  { id: "apple_pay", brand: "apple_pay", label: "Apple Pay" },
-  { id: "card_1",   brand: "visa",       last4: "4242", exp: "12/26", label: "Visa •••• 4242" },
-  { id: "card_2",   brand: "mastercard", last4: "5555", exp: "08/27", label: "Mastercard •••• 5555" },
+  sub: string;
+  fee: string;
+  recommended?: boolean;
+}> = [
+  {
+    id: "us_bank_account",
+    icon: "business-outline",
+    label: "Bank Account",
+    sub: "ACH Direct Debit",
+    fee: "0.8% fee · max $5 per donation",
+    recommended: true,
+  },
+  {
+    id: "apple_pay",
+    icon: "logo-apple",
+    label: "Apple Pay",
+    sub: "Touch ID · Face ID",
+    fee: "2.9% + $0.30 per donation",
+  },
+  {
+    id: "card",
+    icon: "card-outline",
+    label: "Credit / Debit Card",
+    sub: "Visa, Mastercard, Amex",
+    fee: "2.9% + $0.30 per donation",
+  },
 ];
 
-const BRAND_COLOR: Record<string, string> = {
-  visa: "#1A1F71",
-  mastercard: "#EB001B",
-  amex: "#007DC5",
-  apple_pay: "#000000",
-};
-
-const BRAND_LABEL: Record<string, string> = {
-  visa: "VISA",
-  mastercard: "MC",
-  amex: "AMEX",
-  apple_pay: "",
-};
 
 const QUICK_AMOUNTS = [5, 10, 25, 50, 100];
 
@@ -105,187 +112,209 @@ function AmountStep({
 }: {
   org: Nonprofit;
   user: ReturnType<typeof useAuth>["user"];
-  onPay: (amountCents: number) => void;
+  onPay: (amountCents: number, method: PayMethod) => void;
 }) {
   const router = useRouter();
   const inputRef = useRef<TextInput>(null);
   const [cents, setCents] = useState(2500);
   const [paying, setPaying] = useState(false);
-  const [selectedMethod, setSelectedMethod] = useState<PaymentMethod>(MOCK_PAYMENT_METHODS[0]);
+  const [selectedMethod, setSelectedMethod] = useState<PayMethod>("us_bank_account");
 
   const isValid = cents >= 100;
   const activeChip = QUICK_AMOUNTS.find((a) => a * 100 === cents) ?? null;
   const displayValue = centsToDisplay(cents);
 
-  function pickPaymentMethod() {
-    Alert.alert(
-      "Payment method",
-      undefined,
-      [
-        ...MOCK_PAYMENT_METHODS.map((m) => ({
-          text: (selectedMethod.id === m.id ? "✓  " : "     ") + m.label,
-          onPress: () => setSelectedMethod(m),
-        })),
-        {
-          text: "+ Add new card",
-          onPress: () => Alert.alert("Coming soon", "Card management will be available soon."),
-        },
-        { text: "Cancel", style: "cancel" as const },
-      ]
-    );
-  }
-
   async function handleDonate() {
     if (!user) { router.push("/auth/signin"); return; }
     if (!isValid) { Alert.alert("Minimum donation is $1.00"); return; }
     setPaying(true);
-    await onPay(cents);
+    await onPay(cents, selectedMethod);
     setPaying(false);
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ScrollView
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <KeyboardAvoidingView
         style={{ flex: 1 }}
-        contentContainerStyle={styles.amountContent}
-        keyboardShouldPersistTaps="handled"
-        keyboardDismissMode="interactive"
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <OrgHeader org={org} />
-
-        <TouchableOpacity
-          style={styles.amountDisplay}
-          activeOpacity={1}
-          onPress={() => inputRef.current?.focus()}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.amountContent}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
         >
-          <Text style={[
-            styles.dollarSign,
-            {
-              fontSize:
-                displayValue.length <= 6 ? 32 :
-                displayValue.length <= 9 ? 26 : 20,
-              marginTop:
-                displayValue.length <= 6 ? 10 :
-                displayValue.length <= 9 ? 8 : 6,
-            },
-          ]}>$</Text>
-          <TextInput
-            ref={inputRef}
-            style={[
-              styles.amountBig,
+          <OrgHeader org={org} />
+
+          {/* Amount display — tap pencil or amount to edit */}
+          <TouchableOpacity
+            style={styles.amountDisplay}
+            activeOpacity={1}
+            onPress={() => inputRef.current?.focus()}
+          >
+            <Text style={[
+              styles.dollarSign,
               {
                 fontSize:
-                  displayValue.length <= 6 ? 72 :
-                  displayValue.length <= 9 ? 56 : 44,
+                  displayValue.length <= 6 ? 32 :
+                  displayValue.length <= 9 ? 26 : 20,
+                marginTop:
+                  displayValue.length <= 6 ? 10 :
+                  displayValue.length <= 9 ? 8 : 6,
               },
-            ]}
-            value={displayValue}
-            onChangeText={() => {}}
-            onKeyPress={({ nativeEvent }) => {
-              const { key } = nativeEvent;
-              if (key === "Backspace") {
-                setCents((c) => Math.floor(c / 10));
-              } else if (key >= "0" && key <= "9") {
-                const digit = parseInt(key, 10);
-                setCents((c) => (c < 1000000 ? c * 10 + digit : c));
-              }
-            }}
-            keyboardType="number-pad"
-            caretHidden
-            showSoftInputOnFocus
-          />
-        </TouchableOpacity>
-
-        <View style={styles.quickRow}>
-          {QUICK_AMOUNTS.map((amt) => {
-            const active = activeChip === amt;
-            return (
-              <TouchableOpacity
-                key={amt}
-                style={[styles.quickChip, active && styles.quickChipActive]}
-                onPress={() => { setCents(amt * 100); inputRef.current?.blur(); }}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.quickChipText, active && styles.quickChipTextActive]}>
-                  ${amt}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-        {/* Payment method picker */}
-        {user && (
-          <TouchableOpacity style={styles.paymentRow} onPress={pickPaymentMethod} activeOpacity={0.75}>
-            <View style={[styles.paymentBrandBadge, { backgroundColor: BRAND_COLOR[selectedMethod.brand] }]}>
-              {selectedMethod.brand === "apple_pay" ? (
-                <Ionicons name="logo-apple" size={14} color="#fff" />
-              ) : (
-                <Text style={styles.paymentBrandText}>{BRAND_LABEL[selectedMethod.brand]}</Text>
-              )}
-            </View>
-            <Text style={styles.paymentLabel}>{selectedMethod.label}</Text>
-            <Ionicons name="chevron-expand" size={16} color={COLORS.gray400} />
+            ]}>$</Text>
+            <TextInput
+              ref={inputRef}
+              style={[
+                styles.amountBig,
+                {
+                  fontSize:
+                    displayValue.length <= 6 ? 72 :
+                    displayValue.length <= 9 ? 56 : 44,
+                },
+              ]}
+              value={displayValue}
+              onChangeText={() => {}}
+              onKeyPress={({ nativeEvent }) => {
+                const { key } = nativeEvent;
+                if (key === "Backspace") {
+                  setCents((c) => Math.floor(c / 10));
+                } else if (key >= "0" && key <= "9") {
+                  const digit = parseInt(key, 10);
+                  setCents((c) => (c < 1000000 ? c * 10 + digit : c));
+                }
+              }}
+              keyboardType="number-pad"
+              caretHidden
+              showSoftInputOnFocus
+            />
+            <Ionicons
+              name="pencil-outline"
+              size={20}
+              color={COLORS.gray300}
+              style={{ alignSelf: "center", marginLeft: 6, marginTop: 4 }}
+            />
           </TouchableOpacity>
-        )}
 
-        <View style={styles.authBanner}>
-          {user ? (
-            <>
-              <View style={[styles.authIcon, { backgroundColor: COLORS.brandLight }]}>
-                <Ionicons name="person-circle-outline" size={18} color={COLORS.brand} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.authBannerTitle}>Signed in as {user.name ?? user.email}</Text>
-                <Text style={styles.authBannerSub}>Your donation history will be saved</Text>
-              </View>
-            </>
-          ) : (
-            <>
-              <View style={[styles.authIcon, { backgroundColor: "#FFF3E0" }]}>
-                <Ionicons name="person-outline" size={18} color="#FF9500" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.authBannerTitle}>Sign in to donate</Text>
-                <Text style={styles.authBannerSub}>
-                  <Text style={{ color: COLORS.brand, fontWeight: "600" }}
-                    onPress={() => router.push("/auth/signin")}
-                  >Sign in</Text> to track history & share your impact
+          {/* Preset chips */}
+          <View style={styles.quickRow}>
+            {QUICK_AMOUNTS.map((amt) => {
+              const active = activeChip === amt;
+              return (
+                <TouchableOpacity
+                  key={amt}
+                  style={[styles.quickChip, active && styles.quickChipActive]}
+                  onPress={() => { setCents(amt * 100); inputRef.current?.blur(); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.quickChipText, active && styles.quickChipTextActive]}>
+                    ${amt}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* ── Payment method picker ── */}
+          <Text style={styles.sectionLabel}>Pay with</Text>
+          <View style={styles.methodList}>
+            {PAY_METHODS.map((m) => {
+              const active = selectedMethod === m.id;
+              return (
+                <TouchableOpacity
+                  key={m.id}
+                  style={[styles.methodCard, active && styles.methodCardActive]}
+                  onPress={() => setSelectedMethod(m.id)}
+                  activeOpacity={0.75}
+                >
+                  {/* Radio dot */}
+                  <View style={[styles.radioDot, active && styles.radioDotActive]}>
+                    {active && <View style={styles.radioDotInner} />}
+                  </View>
+
+                  {/* Icon */}
+                  <View style={[styles.methodIcon, active && styles.methodIconActive]}>
+                    <Ionicons name={m.icon} size={20} color={active ? COLORS.brand : COLORS.gray500} />
+                  </View>
+
+                  {/* Labels */}
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <Text style={[styles.methodLabel, active && styles.methodLabelActive]}>
+                        {m.label}
+                      </Text>
+                      {m.recommended && (
+                        <View style={styles.recommendedBadge}>
+                          <Text style={styles.recommendedText}>Best value</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.methodSub}>{m.sub}</Text>
+                    <Text style={[styles.methodFee, m.recommended && styles.methodFeeGreen]}>
+                      {m.fee}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          {/* Auth banner */}
+          <View style={styles.authBanner}>
+            {user ? (
+              <>
+                <View style={[styles.authIcon, { backgroundColor: COLORS.brandLight }]}>
+                  <Ionicons name="person-circle-outline" size={18} color={COLORS.brand} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.authBannerTitle}>Signed in as {user.name ?? user.email}</Text>
+                  <Text style={styles.authBannerSub}>Your donation history will be saved</Text>
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={[styles.authIcon, { backgroundColor: "#FFF3E0" }]}>
+                  <Ionicons name="person-outline" size={18} color="#FF9500" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.authBannerTitle}>Sign in to donate</Text>
+                  <Text style={styles.authBannerSub}>
+                    <Text style={{ color: COLORS.brand, fontWeight: "600" }}
+                      onPress={() => router.push("/auth/signin")}
+                    >Sign in</Text> to track history & share your impact
+                  </Text>
+                </View>
+              </>
+            )}
+          </View>
+
+          <View style={styles.stripeNote}>
+            <Ionicons name="lock-closed" size={12} color={COLORS.gray400} />
+            <Text style={styles.stripeNoteText}>Secured by Stripe · Tax-deductible receipt</Text>
+          </View>
+        </ScrollView>
+
+        <View style={styles.bottomBar}>
+          <TouchableOpacity
+            style={[styles.donateBtn, !isValid && styles.donateBtnDisabled]}
+            onPress={handleDonate}
+            disabled={!isValid || paying}
+            activeOpacity={0.85}
+          >
+            {paying ? (
+              <ActivityIndicator color={COLORS.white} />
+            ) : (
+              <>
+                <Ionicons name="heart" size={18} color={COLORS.white} />
+                <Text style={styles.donateBtnText}>
+                  {user ? (isValid ? `Donate ${formatCents(cents)}` : "Donate") : "Sign in to donate"}
                 </Text>
-              </View>
-            </>
-          )}
+              </>
+            )}
+          </TouchableOpacity>
         </View>
-
-        <View style={styles.stripeNote}>
-          <Ionicons name="lock-closed" size={12} color={COLORS.gray400} />
-          <Text style={styles.stripeNoteText}>Secure · Tax deductible</Text>
-        </View>
-      </ScrollView>
-
-      <View style={styles.bottomBar}>
-        <TouchableOpacity
-          style={[styles.donateBtn, !isValid && styles.donateBtnDisabled]}
-          onPress={handleDonate}
-          disabled={!isValid || paying}
-          activeOpacity={0.85}
-        >
-          {paying ? (
-            <ActivityIndicator color={COLORS.white} />
-          ) : (
-            <>
-              <Ionicons name="heart" size={18} color={COLORS.white} />
-              <Text style={styles.donateBtnText}>
-                {user ? (isValid ? `Donate ${formatCents(cents)}` : "Donate") : "Sign in to donate"}
-              </Text>
-            </>
-          )}
-        </TouchableOpacity>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -569,6 +598,7 @@ export default function DonateScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
   const [org, setOrg] = useState<Nonprofit | null>(null);
   const [loadingOrg, setLoadingOrg] = useState(true);
@@ -581,16 +611,56 @@ export default function DonateScreen() {
     api.nonprofits.get(id).then(setOrg).catch(() => {}).finally(() => setLoadingOrg(false));
   }, [id]);
 
-  async function handlePay(cents: number) {
+  async function handlePay(cents: number, method: PayMethod) {
     try {
-      const { url } = await api.stripe.createCheckoutSession(id, cents);
+      // 1. Create a PaymentIntent — server orders payment_method_types by preference
+      const { paymentIntent: clientSecret, donationId: newDonationId } =
+        await api.stripe.createPaymentIntent(id, cents, method);
+
+      // 2. Init payment sheet
+      const { error: initError } = await initPaymentSheet({
+        paymentIntentClientSecret: clientSecret,
+        merchantDisplayName: "GiveStream",
+        allowsDelayedPaymentMethods: true,
+        returnURL: "givestream://payment-return",
+      });
+      if (initError) throw new Error(initError.message);
+
+      // 3. Present the sheet
+      const { error: presentError } = await presentPaymentSheet();
+      if (presentError) {
+        if (presentError.code !== "Canceled") throw new Error(presentError.message);
+        return;
+      }
+
+      // 4. Verify the donation was confirmed server-side via webhook.
+      //    ACH (us_bank_account) takes 1-5 business days to settle — advance immediately.
+      //    Card / Apple Pay webhooks fire within seconds — poll briefly before advancing.
+      if (method !== "us_bank_account") {
+        const POLL_MS = 1500;
+        const MAX_POLLS = 5; // up to ~7.5 s
+        for (let i = 0; i < MAX_POLLS; i++) {
+          await new Promise<void>((r) => setTimeout(r, POLL_MS));
+          try {
+            const donation = await api.donations.get(newDonationId);
+            if (donation.status === "SUCCEEDED") break;
+            if (donation.status === "FAILED") {
+              throw new Error("Payment was declined. Please try a different payment method.");
+            }
+          } catch (pollErr) {
+            if (pollErr instanceof Error && pollErr.message.includes("declined")) throw pollErr;
+            // network hiccup — keep polling
+          }
+        }
+      }
+
+      // 5. Advance to the share step
       setAmountCents(cents);
-      await Linking.openURL(url);
-      // After Stripe checkout the user returns via the deep link success_url
-      // which routes to /donation/success. No step transition here.
+      setDonationId(newDonationId);
+      setStep("share");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Something went wrong";
-      Alert.alert("Error", msg);
+      Alert.alert("Payment Error", msg);
     }
   }
 
@@ -698,17 +768,47 @@ const styles = StyleSheet.create({
   quickChipActive: { backgroundColor: COLORS.brand, borderColor: COLORS.brand },
   quickChipText: { fontSize: 15, fontWeight: "700", color: COLORS.gray700 },
   quickChipTextActive: { color: COLORS.white },
-  paymentRow: {
+  // ── Payment method picker ──
+  sectionLabel: {
+    fontSize: 13, fontWeight: "700", color: COLORS.gray500,
+    textTransform: "uppercase", letterSpacing: 0.8,
+    marginBottom: 10,
+  },
+  methodList: { gap: 10, marginBottom: 16 },
+  methodCard: {
     flexDirection: "row", alignItems: "center", gap: 12,
-    backgroundColor: COLORS.white, borderRadius: 14, padding: 14, marginBottom: 12,
+    backgroundColor: COLORS.white, borderRadius: 16, padding: 14,
+    borderWidth: 1.5, borderColor: COLORS.gray100,
     shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
   },
-  paymentBrandBadge: {
-    width: 42, height: 28, borderRadius: 6,
+  methodCardActive: {
+    borderColor: COLORS.brand,
+    backgroundColor: COLORS.brandLight + "60",
+  },
+  radioDot: {
+    width: 20, height: 20, borderRadius: 10,
+    borderWidth: 2, borderColor: COLORS.gray300,
     alignItems: "center", justifyContent: "center",
   },
-  paymentBrandText: { fontSize: 11, fontWeight: "900", color: "#fff", letterSpacing: 0.5 },
-  paymentLabel: { flex: 1, fontSize: 14, fontWeight: "600", color: COLORS.gray800 },
+  radioDotActive: { borderColor: COLORS.brand },
+  radioDotInner: {
+    width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.brand,
+  },
+  methodIcon: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: COLORS.gray100, alignItems: "center", justifyContent: "center",
+  },
+  methodIconActive: { backgroundColor: COLORS.brandLight },
+  methodLabel: { fontSize: 14, fontWeight: "700", color: COLORS.gray800 },
+  methodLabelActive: { color: COLORS.gray900 },
+  methodSub: { fontSize: 12, color: COLORS.gray400, marginTop: 1 },
+  methodFee: { fontSize: 12, color: COLORS.gray500, marginTop: 3, fontWeight: "500" },
+  methodFeeGreen: { color: "#12B76A" },
+  recommendedBadge: {
+    backgroundColor: "#ECFDF3", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
+  },
+  recommendedText: { fontSize: 11, fontWeight: "700", color: "#12B76A" },
+
   authBanner: {
     flexDirection: "row", alignItems: "center", gap: 12,
     backgroundColor: COLORS.white, borderRadius: 14, padding: 14, marginBottom: 12,

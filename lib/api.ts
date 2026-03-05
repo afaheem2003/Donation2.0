@@ -137,10 +137,10 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ nonprofitId, amountCents }),
       }),
-    createPaymentIntent: (nonprofitId: string, amountCents: number) =>
+    createPaymentIntent: (nonprofitId: string, amountCents: number, preferredMethod?: string) =>
       request<{ paymentIntent: string; donationId: string }>(
         "/api/stripe/payment-intent",
-        { method: "POST", body: JSON.stringify({ nonprofitId, amountCents }) }
+        { method: "POST", body: JSON.stringify({ nonprofitId, amountCents, preferredMethod }) }
       ),
   },
 

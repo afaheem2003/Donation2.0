@@ -46,7 +46,8 @@ export async function POST(req: NextRequest) {
   const deepLinkBase = process.env.EXPO_DEEP_LINK_BASE ?? webUrl;
 
   const checkoutSession = await stripe.checkout.sessions.create({
-    payment_method_types: ["card"],
+    payment_method_types: ["card", "us_bank_account"],
+    billing_address_collection: "required",
     mode: "payment",
     line_items: [
       {
