@@ -42,7 +42,7 @@ export default function UsernameScreen() {
     try {
       await api.users.setUsername(username);
       await refreshSession();
-      router.replace("/(tabs)");
+      router.replace("/onboarding/interests");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "";
       if (msg.includes("409") || msg.toLowerCase().includes("taken")) {

@@ -94,8 +94,11 @@ export default function TabLayout() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && user && !user.usernameSet) {
+    if (loading) return;
+    if (user && !user.usernameSet) {
       router.replace("/onboarding/username");
+    } else if (user && user.usernameSet && !user.onboardingComplete) {
+      router.replace("/onboarding/interests");
     }
   }, [user, loading]);
 

@@ -182,6 +182,22 @@ export const api = {
       request<{ users: UserSearchResult[] }>(
         `/api/users/search?q=${encodeURIComponent(q)}`
       ),
+    completeOnboarding: (data: {
+      interests?: string[];
+      school?: string;
+      givingFrequency?: string;
+      complete?: boolean;
+    }) =>
+      request<{
+        id: string;
+        interests: string[];
+        school: string | null;
+        givingFrequency: string | null;
+        onboardingComplete: boolean;
+      }>("/api/users/me/onboarding", {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
   },
 
   auth: {
@@ -263,6 +279,8 @@ export interface SessionUser {
   username: string;
   role: string;
   usernameSet: boolean;
+  onboardingComplete: boolean;
+  interests?: string[];
 }
 
 export interface UserProfile {

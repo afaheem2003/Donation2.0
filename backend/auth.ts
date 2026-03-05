@@ -86,6 +86,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.username = user.username ?? "";
         session.user.role = user.role ?? "DONOR";
         session.user.usernameSet = user.usernameSet ?? false;
+        session.user.onboardingComplete = user.onboardingComplete ?? false;
+        session.user.interests = (user.interests as string[]) ?? [];
         const count = await prisma.nonprofitAdmin.count({ where: { userId: user.id } });
         session.user.hasNonprofitAccess = count > 0;
       }

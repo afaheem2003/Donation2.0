@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "desc" },
     include: {
       user: { select: { id: true, name: true, username: true, avatarUrl: true } },
-      nonprofit: { select: { id: true, name: true, logoUrl: true, verified: true } },
+      nonprofit: { select: { id: true, name: true, logoUrl: true, verified: true, category: true } },
       donation: { select: { amountCents: true, currency: true } },
       _count: { select: { likes: true, comments: true } },
       likes: session?.user?.id
@@ -69,6 +69,8 @@ export async function GET(req: NextRequest) {
     nextCursor = posts.pop()!.id;
   }
 
+  const userInterests: string[] = session?.user?.interests ?? [];
+
   const formatted = posts.map((post) => ({
     ...post,
     likeCount: post._count.likes,
@@ -77,6 +79,15 @@ export async function GET(req: NextRequest) {
     likes: undefined,
     _count: undefined,
   }));
+
+  // Boost posts from nonprofits whose category matches the user's interests
+  if (userInterests.length > 0) {
+    formatted.sort((a, b) => {
+      const aMatch = userInterests.includes(a.nonprofit.category ?? "") ? 0 : 1;
+      const bMatch = userInterests.includes(b.nonprofit.category ?? "") ? 0 : 1;
+      return aMatch - bMatch;
+    });
+  }
 
   return NextResponse.json({ posts: formatted, nextCursor });
 }

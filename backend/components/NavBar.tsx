@@ -3,12 +3,26 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useSession, signIn, signOut } from "next-auth/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import { Heart, User, LogOut, Menu, X, LayoutDashboard, Shield } from "lucide-react";
 
 export function NavBar() {
   const { data: session } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
+  const pathname = usePathname();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (
+      session?.user &&
+      !session.user.onboardingComplete &&
+      !pathname.startsWith("/onboarding") &&
+      !pathname.startsWith("/auth")
+    ) {
+      router.replace("/onboarding");
+    }
+  }, [session, pathname]);
 
   return (
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">

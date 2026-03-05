@@ -12,6 +12,8 @@ export interface AppSession {
     role: string;
     usernameSet: boolean;
     hasNonprofitAccess: boolean;
+    onboardingComplete: boolean;
+    interests: string[];
   };
 }
 
@@ -43,6 +45,8 @@ export async function getSession(req: NextRequest): Promise<AppSession | null> {
               usernameSet: true,
               avatarUrl: true,
               role: true,
+              onboardingComplete: true,
+              interests: true,
             },
           },
         },
@@ -60,6 +64,8 @@ export async function getSession(req: NextRequest): Promise<AppSession | null> {
             usernameSet: u.usernameSet,
             role: String(u.role),
             hasNonprofitAccess: nonprofitCount > 0,
+            onboardingComplete: u.onboardingComplete,
+            interests: u.interests as string[],
           },
         };
       }
@@ -80,6 +86,8 @@ export async function getSession(req: NextRequest): Promise<AppSession | null> {
       role: session.user.role ?? "DONOR",
       usernameSet: session.user.usernameSet ?? false,
       hasNonprofitAccess: session.user.hasNonprofitAccess ?? false,
+      onboardingComplete: session.user.onboardingComplete ?? false,
+      interests: (session.user.interests as string[]) ?? [],
     },
   };
 }

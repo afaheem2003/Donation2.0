@@ -53,14 +53,18 @@ enum UserRole {
 }
 
 model User {
-  id          String   @id @default(cuid())
-  name        String?
-  email       String   @unique
-  username    String   @unique @default(cuid())
-  usernameSet Boolean  @default(false)
-  avatarUrl   String?
-  role        UserRole @default(DONOR)
-  createdAt   DateTime @default(now())
+  id                 String              @id @default(cuid())
+  name               String?
+  email              String              @unique
+  username           String              @unique @default(cuid())
+  usernameSet        Boolean             @default(false)
+  avatarUrl          String?
+  role               UserRole            @default(DONOR)
+  createdAt          DateTime            @default(now())
+  interests          NonprofitCategory[]
+  school             String?
+  givingFrequency    String?
+  onboardingComplete Boolean             @default(false)
 
   // NextAuth
   emailVerified DateTime?

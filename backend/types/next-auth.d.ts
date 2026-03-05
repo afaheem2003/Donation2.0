@@ -8,6 +8,8 @@ declare module "next-auth" {
       role: string;
       usernameSet: boolean;
       hasNonprofitAccess: boolean;
+      onboardingComplete: boolean;
+      interests: string[];
     } & DefaultSession["user"];
   }
 }
@@ -19,5 +21,7 @@ declare module "next-auth/adapters" {
     username?: string;
     role?: string;
     usernameSet?: boolean;
+    onboardingComplete?: boolean;
+    interests?: string[];
   }
 }
