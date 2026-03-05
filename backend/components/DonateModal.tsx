@@ -37,16 +37,16 @@ export function DonateModal({ nonprofitId, nonprofitName, onClose }: DonateModal
     setError("");
 
     try {
-      const res = await fetch("/api/stripe/create-checkout-session", {
+      const res = await fetch("/api/donations/mock", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ nonprofitId, amountCents }),
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to create session");
+      if (!res.ok) throw new Error(data.error ?? "Failed to process donation");
 
-      window.location.href = data.url;
+      window.location.href = `/donation/success?donation_id=${data.donationId}`;
     } catch (err) {
       setError((err as Error).message);
       setLoading(false);

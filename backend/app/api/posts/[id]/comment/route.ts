@@ -13,9 +13,14 @@ export async function GET(
 ) {
   const { id: postId } = await params;
 
+  // Verify the parent post exists and is not deleted
+  const post = await prisma.post.findFirst({ where: { id: postId, isDeleted: false } });
+  if (!post) return NextResponse.json({ error: "Post not found" }, { status: 404 });
+
   const comments = await prisma.comment.findMany({
     where: { postId },
     orderBy: { createdAt: "asc" },
+    take: 100,
     include: {
       user: { select: { id: true, name: true, username: true, avatarUrl: true } },
     },

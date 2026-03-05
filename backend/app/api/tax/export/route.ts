@@ -10,7 +10,11 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const yearParam = searchParams.get("year");
-  const year = yearParam ? parseInt(yearParam) : new Date().getFullYear();
+  const currentYear = new Date().getFullYear();
+  const year = yearParam ? parseInt(yearParam, 10) : currentYear;
+  if (isNaN(year) || year < 2000 || year > currentYear) {
+    return NextResponse.json({ error: "Invalid year" }, { status: 400 });
+  }
 
   const startDate = new Date(`${year}-01-01T00:00:00.000Z`);
   const endDate = new Date(`${year + 1}-01-01T00:00:00.000Z`);
@@ -28,15 +32,25 @@ export async function GET(req: NextRequest) {
     orderBy: { donatedAt: "asc" },
   });
 
+  // Sanitize a CSV cell: quote it and prevent formula injection.
+  // Cells starting with =, +, -, @, tab, or CR would execute as formulas in
+  // Excel/Sheets when the file is opened.
+  function csvCell(value: string): string {
+    const dangerous = ["=", "+", "-", "@", "\t", "\r"];
+    const safe = dangerous.some((c) => value.startsWith(c)) ? `'${value}` : value;
+    // Always quote to handle commas and newlines in org names.
+    return `"${safe.replace(/"/g, '""')}"`;
+  }
+
   const rows = [
     ["Date", "Nonprofit", "EIN", "Amount (USD)", "Receipt #", "Status"],
     ...donations.map((d) => [
-      d.donatedAt ? new Date(d.donatedAt).toISOString().split("T")[0] : "",
-      `"${d.nonprofit.name}"`,
-      d.nonprofit.ein,
-      (d.amountCents / 100).toFixed(2),
-      d.receipt?.receiptNumber ?? "",
-      d.status,
+      csvCell(d.donatedAt ? new Date(d.donatedAt).toISOString().split("T")[0] : ""),
+      csvCell(d.nonprofit.name),
+      csvCell(d.nonprofit.ein),
+      csvCell((d.amountCents / 100).toFixed(2)),
+      csvCell(d.receipt?.receiptNumber ?? ""),
+      csvCell(d.status),
     ]),
   ];
 

@@ -31,8 +31,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const data = await api.auth.session();
       setUser(data?.user ?? null);
-    } catch {
-      setUser(null);
+    } catch (err) {
+      // A network error (timeout, no connection) must not log the user out —
+      // only a real 401 means the session is invalid. We check for a stored
+      // token: if one exists and the error is not an HTTP failure, keep the
+      // current user state rather than wiping it.
+      const isNetworkError =
+        err instanceof Error &&
+        (err.name === "AbortError" ||
+          err.message.startsWith("Network") ||
+          err.message.includes("fetch"));
+      const hasToken = await getSessionToken();
+      if (!isNetworkError || !hasToken) {
+        setUser(null);
+      }
     }
   }, []);
 
@@ -46,7 +58,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const authUrl = `${BASE_URL}/api/auth/google-signin?callbackUrl=${encodeURIComponent(relayUrl)}`;
 
     function extractToken(url: string): string | null {
-      const match = url.match(/[?&]token=([^&#]+)/);
+      // Token is in the URL fragment (#token=...) to avoid server-side logging.
+      const match = url.match(/[#&]token=([^&#]+)/);
       return match ? decodeURIComponent(match[1]) : null;
     }
 

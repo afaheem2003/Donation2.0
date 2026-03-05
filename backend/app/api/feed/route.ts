@@ -1,16 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/getSession";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
+import { rateLimit } from "@/lib/rateLimit";
 
 export async function GET(req: NextRequest) {
   const session = await getSession(req);
+
+  // Rate limit by user ID if authenticated, otherwise by IP
+  const rateLimitKey = session?.user?.id
+    ? `feed:${session.user.id}`
+    : `feed:${req.headers.get("x-forwarded-for") ?? "unknown"}`;
+  if (!rateLimit(rateLimitKey, 60)) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   const { searchParams } = new URL(req.url);
   const cursor = searchParams.get("cursor");
   const limit = 10;
 
   // When logged in, filter by followed users and followed nonprofits.
   // Guests see all posts (explore mode).
-  let where: Parameters<typeof prisma.post.findMany>[0]["where"] = { isDeleted: false };
+  let where: Prisma.PostWhereInput = { isDeleted: false };
 
   if (session?.user?.id) {
     const [followingIds, npFollowingIds] = await Promise.all([

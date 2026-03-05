@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, ActivityIndicator, Alert, Image, Animated,
-  KeyboardAvoidingView, Platform, Switch,
+  KeyboardAvoidingView, Platform, Switch, Linking,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -268,7 +268,7 @@ function AmountStep({
 
       <View style={styles.bottomBar}>
         <TouchableOpacity
-          style={[styles.donateBtn, (!isValid || !user) && styles.donateBtnDisabled]}
+          style={[styles.donateBtn, !isValid && styles.donateBtnDisabled]}
           onPress={handleDonate}
           disabled={!isValid || paying}
           activeOpacity={0.85}
@@ -583,10 +583,11 @@ export default function DonateScreen() {
 
   async function handlePay(cents: number) {
     try {
-      const data = await api.donations.mock(id, cents);
+      const { url } = await api.stripe.createCheckoutSession(id, cents);
       setAmountCents(cents);
-      setDonationId(data.donationId);
-      setStep("share");
+      await Linking.openURL(url);
+      // After Stripe checkout the user returns via the deep link success_url
+      // which routes to /donation/success. No step transition here.
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Something went wrong";
       Alert.alert("Error", msg);

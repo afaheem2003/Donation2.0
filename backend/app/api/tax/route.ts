@@ -10,7 +10,11 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const yearParam = searchParams.get("year");
-  const year = yearParam ? parseInt(yearParam) : new Date().getFullYear();
+  const currentYear = new Date().getFullYear();
+  const year = yearParam ? parseInt(yearParam, 10) : currentYear;
+  if (isNaN(year) || year < 2000 || year > currentYear) {
+    return NextResponse.json({ error: "Invalid year" }, { status: 400 });
+  }
 
   const startDate = new Date(`${year}-01-01T00:00:00.000Z`);
   const endDate = new Date(`${year + 1}-01-01T00:00:00.000Z`);

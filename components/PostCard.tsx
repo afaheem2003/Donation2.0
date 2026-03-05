@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import {
-  View, Text, Image, TouchableOpacity, TextInput,
+  Animated, View, Text, Image, TouchableOpacity, TextInput,
   StyleSheet, Alert, ActivityIndicator, Dimensions,
   Modal, KeyboardAvoidingView, Platform, Switch, ScrollView,
 } from "react-native";
@@ -20,6 +20,7 @@ export function PostCard({ post }: PostCardProps) {
   const router = useRouter();
   const { user } = useAuth();
   const navigating = useRef(false);
+  const heartScale = useRef(new Animated.Value(1)).current;
 
   // Feed interaction state
   const [liked, setLiked] = useState(post.viewerLiked);
@@ -63,6 +64,10 @@ export function PostCard({ post }: PostCardProps) {
 
   async function toggleLike() {
     if (!user) { router.push("/auth/signin"); return; }
+    Animated.sequence([
+      Animated.spring(heartScale, { toValue: 1.35, useNativeDriver: true, speed: 40, bounciness: 12 }),
+      Animated.spring(heartScale, { toValue: 1.0, useNativeDriver: true, speed: 40, bounciness: 4 }),
+    ]).start();
     setLiked(!liked);
     setLikeCount(liked ? likeCount - 1 : likeCount + 1);
     try { await api.posts.like(post.id); } catch { /* optimistic */ }
@@ -252,15 +257,20 @@ export function PostCard({ post }: PostCardProps) {
         <View style={styles.actions}>
           <View style={styles.actionsLeft}>
             <TouchableOpacity onPress={toggleLike} activeOpacity={0.7}>
-              <Ionicons
-                name={liked ? "heart" : "heart-outline"}
-                size={26}
-                color={liked ? COLORS.red : COLORS.gray900}
-              />
+              <Animated.View style={{ transform: [{ scale: heartScale }] }}>
+                <Ionicons
+                  name={liked ? "heart" : "heart-outline"}
+                  size={26}
+                  color={liked ? COLORS.red : COLORS.gray900}
+                />
+              </Animated.View>
             </TouchableOpacity>
             {currentAllowComments && (
-              <TouchableOpacity onPress={loadComments} activeOpacity={0.7}>
+              <TouchableOpacity onPress={loadComments} activeOpacity={0.7} style={styles.actionWithCount}>
                 <Ionicons name="chatbubble-outline" size={24} color={COLORS.gray900} />
+                {post.commentCount > 0 && (
+                  <Text style={styles.actionCount}>{post.commentCount}</Text>
+                )}
               </TouchableOpacity>
             )}
             {!currentAllowComments && (
@@ -312,14 +322,20 @@ export function PostCard({ post }: PostCardProps) {
               <ActivityIndicator size="small" color={COLORS.gray400} style={{ padding: 8 }} />
             ) : (
               <>
-                {comments.map((c) => (
-                  <View key={c.id} style={styles.commentRow}>
-                    <Text style={styles.commentText}>
-                      <Text style={styles.commentUser}>{c.user.name ?? c.user.username}</Text>
-                      {"  "}{c.body}
-                    </Text>
-                  </View>
-                ))}
+                {comments.map((c) => {
+                  const cInitial = c.user.name?.[0]?.toUpperCase() ?? c.user.username[0]?.toUpperCase() ?? "?";
+                  return (
+                    <View key={c.id} style={styles.commentRow}>
+                      <View style={styles.commentAvatar}>
+                        <Text style={styles.commentAvatarText}>{cInitial}</Text>
+                      </View>
+                      <Text style={[styles.commentText, { flex: 1 }]}>
+                        <Text style={styles.commentUser}>{c.user.name ?? c.user.username}</Text>
+                        {"  "}{c.body}
+                      </Text>
+                    </View>
+                  );
+                })}
                 {user && (
                   <View style={styles.commentInput}>
                     <TextInput
@@ -545,6 +561,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 16,
   },
+  actionWithCount: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  actionCount: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.gray700,
+  },
   commentsOffBadge: { opacity: 0.3 },
 
   // ── Like count ──────────────────────────────────────────────
@@ -593,7 +619,25 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   commentRow: {
-    marginBottom: 4,
+    marginBottom: 6,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  commentAvatar: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: COLORS.gray100,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    marginTop: 1,
+  },
+  commentAvatarText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: COLORS.gray500,
   },
   commentText: {
     fontSize: 13,

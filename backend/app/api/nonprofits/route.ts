@@ -2,11 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
+  const VALID_CATEGORIES = [
+    "EDUCATION", "HEALTH", "ENVIRONMENT", "ARTS",
+    "HUMAN_SERVICES", "ANIMALS", "INTERNATIONAL", "RELIGION",
+    "COMMUNITY", "OTHER",
+  ];
+
   const { searchParams } = new URL(req.url);
   const search = searchParams.get("search") ?? "";
   const category = searchParams.get("category");
-  const page = parseInt(searchParams.get("page") ?? "1");
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
   const limit = 12;
+
+  if (category && !VALID_CATEGORIES.includes(category)) {
+    return NextResponse.json({ error: "Invalid category" }, { status: 400 });
+  }
 
   const where = {
     ...(search && {

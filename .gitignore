@@ -40,6 +40,12 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# Claude / AI tooling
+.claude/
+.claude-flow/
+.swarm/
+.mcp.json
+
 # generated native folders
 /ios
 /android

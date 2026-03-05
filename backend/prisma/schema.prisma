@@ -49,19 +49,18 @@ model VerificationToken {
 
 enum UserRole {
   DONOR
-  NONPROFIT_ADMIN
   PLATFORM_ADMIN
 }
 
 model User {
-  id        String   @id @default(cuid())
-  name      String?
-  email     String   @unique
+  id          String   @id @default(cuid())
+  name        String?
+  email       String   @unique
   username    String   @unique @default(cuid())
   usernameSet Boolean  @default(false)
   avatarUrl   String?
-  role      UserRole @default(DONOR)
-  createdAt DateTime @default(now())
+  role        UserRole @default(DONOR)
+  createdAt   DateTime @default(now())
 
   // NextAuth
   emailVerified DateTime?
@@ -71,14 +70,19 @@ model User {
   yearlyGoalCents Int?
 
   // App relations
-  nonprofitAdmins NonprofitAdmin[]
-  donations       Donation[]
-  posts           Post[]
-  likes           Like[]
-  comments        Comment[]
-  following          Follow[]           @relation("follower")
-  followers          Follow[]           @relation("following")
-  nonprofitFollows   NonprofitFollow[]
+  nonprofitAdmins  NonprofitAdmin[]
+  donations        Donation[]
+  posts            Post[]
+  likes            Like[]
+  comments         Comment[]
+  following        Follow[]          @relation("follower")
+  followers        Follow[]          @relation("following")
+  nonprofitFollows NonprofitFollow[]
+
+  reviewedApplications NonprofitApplication[] @relation("ApplicationReviewer")
+  campaignsCreated     Campaign[]             @relation("CampaignCreator")
+  campaignUpdates      CampaignUpdate[]       @relation("CampaignUpdateAuthor")
+  adminInvitesSent     AdminInvite[]          @relation("InviteSender")
 }
 
 enum NonprofitCategory {
@@ -107,10 +111,17 @@ model Nonprofit {
   longitude   Float?
   createdAt   DateTime          @default(now())
 
-  admins           NonprofitAdmin[]
-  donations        Donation[]
-  posts            Post[]
-  followers        NonprofitFollow[]
+  admins    NonprofitAdmin[]
+  donations Donation[]
+  posts     Post[]
+  followers NonprofitFollow[]
+
+  stripeConnect StripeConnect?
+  campaigns     Campaign[]
+  payouts       Payout[]
+  application   NonprofitApplication?
+  adminInvites  AdminInvite[]
+  notifPrefs    NonprofitNotifPrefs?
 }
 
 model NonprofitFollow {
@@ -150,20 +161,54 @@ enum DonationStatus {
   REFUNDED
 }
 
+enum ApplicationStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ENDED
+  ARCHIVED
+}
+
+enum StripeConnectStatus {
+  NOT_CONNECTED
+  PENDING_VERIFICATION
+  ACTIVE
+  RESTRICTED
+  DEAUTHORIZED
+}
+
+enum PayoutStatus {
+  PENDING
+  IN_TRANSIT
+  PAID
+  FAILED
+  CANCELED
+}
+
 model Donation {
-  id                       String         @id @default(cuid())
-  userId                   String?
-  nonprofitId              String
-  amountCents              Int
-  currency                 String         @default("usd")
-  status                   DonationStatus @default(PENDING)
-  stripeCheckoutSessionId  String?        @unique
-  stripePaymentIntentId    String?
-  donatedAt                DateTime?
-  createdAt                DateTime       @default(now())
+  id                      String         @id @default(cuid())
+  userId                  String?
+  nonprofitId             String
+  amountCents             Int
+  currency                String         @default("usd")
+  status                  DonationStatus @default(PENDING)
+  stripeCheckoutSessionId String?        @unique
+  stripePaymentIntentId   String?
+  donatedAt               DateTime?
+  createdAt               DateTime       @default(now())
+
+  campaignId String?
 
   user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
   nonprofit Nonprofit @relation(fields: [nonprofitId], references: [id], onDelete: Cascade)
+  campaign  Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   receipt   Receipt?
   posts     Post[]
 }
@@ -181,11 +226,11 @@ model Receipt {
 }
 
 model Post {
-  id          String   @id @default(cuid())
-  userId      String
-  nonprofitId String
-  donationId  String?
-  caption     String   @db.Text
+  id            String   @id @default(cuid())
+  userId        String
+  nonprofitId   String
+  donationId    String?
+  caption       String   @db.Text
   imageUrl      String?
   isDeleted     Boolean  @default(false)
   allowComments Boolean  @default(true)
@@ -196,6 +241,13 @@ model Post {
   donation  Donation? @relation(fields: [donationId], references: [id], onDelete: SetNull)
   likes     Like[]
   comments  Comment[]
+
+  // Feed query: WHERE isDeleted=false ORDER BY createdAt DESC
+  @@index([isDeleted, createdAt(sort: Desc)])
+  // Authenticated feed: posts from followed users
+  @@index([userId, isDeleted, createdAt(sort: Desc)])
+  // Authenticated feed: posts from followed nonprofits
+  @@index([nonprofitId, isDeleted, createdAt(sort: Desc)])
 }
 
 model Like {
@@ -231,4 +283,148 @@ model Follow {
   following User @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
 
   @@unique([followerId, followingId])
+}
+
+model NonprofitApplication {
+  id               String            @id @default(cuid())
+  submittedByEmail String
+  submittedByName  String
+  orgName          String
+  ein              String
+  isClaim          Boolean           @default(false)
+  category         NonprofitCategory @default(OTHER)
+  description      String            @db.Text
+  website          String?
+  logoUrl          String?
+  addressLine1     String?
+  city             String?
+  state            String?
+  zip              String?
+  einVerified      Boolean           @default(false)
+  einVerifiedAt    DateTime?
+  status           ApplicationStatus @default(PENDING)
+  reviewedAt       DateTime?
+  reviewedByUserId String?
+  reviewNotes      String?           @db.Text
+  nonprofitId      String?           @unique
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  reviewedBy User?      @relation("ApplicationReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  nonprofit  Nonprofit? @relation(fields: [nonprofitId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([ein])
+}
+
+model StripeConnect {
+  id                  String              @id @default(cuid())
+  nonprofitId         String              @unique
+  stripeAccountId     String              @unique
+  status              StripeConnectStatus @default(NOT_CONNECTED)
+  chargesEnabled      Boolean             @default(false)
+  payoutsEnabled      Boolean             @default(false)
+  detailsSubmitted    Boolean             @default(false)
+  onboardingUrl       String?
+  onboardingExpiresAt DateTime?
+  connectedAt         DateTime?
+  disconnectedAt      DateTime?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  nonprofit Nonprofit @relation(fields: [nonprofitId], references: [id], onDelete: Cascade)
+  payouts   Payout[]
+}
+
+model Campaign {
+  id              String         @id @default(cuid())
+  nonprofitId     String
+  createdByUserId String
+  title           String
+  slug            String         @unique
+  description     String         @db.Text
+  coverImageUrl   String?
+  goalCents       Int?
+  status          CampaignStatus @default(DRAFT)
+  startsAt        DateTime?
+  endsAt          DateTime?
+  raisedCents     Int            @default(0)
+  donorCount      Int            @default(0)
+  publishedAt     DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  nonprofit  Nonprofit        @relation(fields: [nonprofitId], references: [id], onDelete: Cascade)
+  createdBy  User             @relation("CampaignCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  donations  Donation[]
+  updates    CampaignUpdate[]
+
+  @@index([nonprofitId, status, createdAt(sort: Desc)])
+  @@index([slug])
+}
+
+model CampaignUpdate {
+  id         String   @id @default(cuid())
+  campaignId String
+  authorId   String
+  title      String?
+  body       String   @db.Text
+  imageUrl   String?
+  isDeleted  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  author   User     @relation("CampaignUpdateAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId, isDeleted, createdAt(sort: Desc)])
+}
+
+model Payout {
+  id              String       @id @default(cuid())
+  stripeConnectId String
+  nonprofitId     String
+  stripePayoutId  String       @unique
+  amountCents     Int
+  currency        String       @default("usd")
+  status          PayoutStatus @default(PENDING)
+  arrivalDate     DateTime?
+  description     String?
+  failureMessage  String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  stripeConnect StripeConnect @relation(fields: [stripeConnectId], references: [id], onDelete: Cascade)
+  nonprofit     Nonprofit     @relation(fields: [nonprofitId], references: [id], onDelete: Cascade)
+
+  @@index([nonprofitId, createdAt(sort: Desc)])
+}
+
+model AdminInvite {
+  id              String    @id @default(cuid())
+  nonprofitId     String
+  email           String
+  role            AdminRole @default(ADMIN)
+  token           String    @unique @default(cuid())
+  invitedByUserId String
+  acceptedAt      DateTime?
+  expiresAt       DateTime
+  createdAt       DateTime  @default(now())
+
+  nonprofit  Nonprofit @relation(fields: [nonprofitId], references: [id], onDelete: Cascade)
+  invitedBy  User      @relation("InviteSender", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+
+  @@unique([nonprofitId, email])
+  @@index([token])
+}
+
+model NonprofitNotifPrefs {
+  nonprofitId          String   @id
+  emailOnDonation      Boolean  @default(true)
+  emailOnNewFollower   Boolean  @default(true)
+  emailOnComment       Boolean  @default(true)
+  emailWeeklyDigest    Boolean  @default(true)
+  updatedAt            DateTime @updatedAt
+
+  nonprofit Nonprofit @relation(fields: [nonprofitId], references: [id], onDelete: Cascade)
 }

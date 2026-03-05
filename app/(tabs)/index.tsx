@@ -18,6 +18,7 @@ export default function FeedScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [feedError, setFeedError] = useState(false);
 
   const loadFeed = useCallback(async (cursor?: string) => {
     return await api.feed.get(cursor);
@@ -25,12 +26,13 @@ export default function FeedScreen() {
 
   const init = useCallback(async () => {
     setLoading(true);
+    setFeedError(false);
     try {
       const data = await loadFeed();
       setPosts(data.posts);
       setNextCursor(data.nextCursor);
     } catch {
-      // show empty state if backend unreachable
+      setFeedError(true);
     } finally {
       setLoading(false);
     }
@@ -40,11 +42,14 @@ export default function FeedScreen() {
 
   async function onRefresh() {
     setRefreshing(true);
+    setFeedError(false);
     try {
       const data = await loadFeed();
       setPosts(data.posts);
       setNextCursor(data.nextCursor);
-    } catch { /* ignore */ } finally {
+    } catch {
+      setFeedError(true);
+    } finally {
       setRefreshing(false);
     }
   }
@@ -117,16 +122,6 @@ export default function FeedScreen() {
               <Text style={styles.storyLabel} numberOfLines={1}>Discover</Text>
             </TouchableOpacity>
 
-            {/* Trending shortcut */}
-            <TouchableOpacity style={styles.storyItem} onPress={() => router.push("/(tabs)/discover")} activeOpacity={0.8}>
-              <View style={styles.storyRing}>
-                <View style={[styles.storyAvatar, { backgroundColor: "#FFF0ED", alignItems: "center", justifyContent: "center" }]}>
-                  <Ionicons name="trending-up" size={22} color="#F04438" />
-                </View>
-              </View>
-              <Text style={styles.storyLabel} numberOfLines={1}>Trending</Text>
-            </TouchableOpacity>
-
             {/* Impact shortcut */}
             <TouchableOpacity style={styles.storyItem} onPress={() => router.push("/(tabs)/tax")} activeOpacity={0.8}>
               <View style={styles.storyRing}>
@@ -144,20 +139,30 @@ export default function FeedScreen() {
       ListEmptyComponent={
         <View style={styles.empty}>
           <View style={styles.emptyIconWrap}>
-            <Ionicons name="people-outline" size={44} color={COLORS.gray300} />
+            <Ionicons
+              name={feedError ? "cloud-offline-outline" : "people-outline"}
+              size={44}
+              color={COLORS.gray300}
+            />
           </View>
-          <Text style={styles.emptyTitle}>Follow people to see their posts</Text>
-          <Text style={styles.emptySub}>
-            Browse nonprofits to find donors sharing their impact, then follow them.
+          <Text style={styles.emptyTitle}>
+            {feedError ? "Couldn't load feed" : "Follow people to see their posts"}
           </Text>
-          <TouchableOpacity
-            style={styles.emptyBtn}
-            onPress={() => router.push("/(tabs)/discover")}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="search" size={16} color={COLORS.white} style={{ marginRight: 6 }} />
-            <Text style={styles.emptyBtnText}>Browse nonprofits</Text>
-          </TouchableOpacity>
+          <Text style={styles.emptySub}>
+            {feedError
+              ? "Check your connection and pull down to try again."
+              : "Browse nonprofits to find donors sharing their impact, then follow them."}
+          </Text>
+          {!feedError && (
+            <TouchableOpacity
+              style={styles.emptyBtn}
+              onPress={() => router.push("/(tabs)/discover")}
+              activeOpacity={0.85}
+            >
+              <Ionicons name="search" size={16} color={COLORS.white} style={{ marginRight: 6 }} />
+              <Text style={styles.emptyBtnText}>Browse nonprofits</Text>
+            </TouchableOpacity>
+          )}
         </View>
       }
       ListFooterComponent={

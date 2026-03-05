@@ -80,12 +80,14 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (new URL(url).origin === baseUrl) return url;
       return baseUrl;
     },
-    session({ session, user }) {
+    async session({ session, user }) {
       if (session.user) {
         session.user.id = user.id;
-        session.user.username = (user as { username?: string }).username ?? "";
-        session.user.role = (user as { role?: string }).role ?? "DONOR";
-        session.user.usernameSet = (user as { usernameSet?: boolean }).usernameSet ?? false;
+        session.user.username = user.username ?? "";
+        session.user.role = user.role ?? "DONOR";
+        session.user.usernameSet = user.usernameSet ?? false;
+        const count = await prisma.nonprofitAdmin.count({ where: { userId: user.id } });
+        session.user.hasNonprofitAccess = count > 0;
       }
       return session;
     },

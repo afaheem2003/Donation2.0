@@ -6,7 +6,7 @@ import { z } from "zod";
 
 const schema = z.object({
   nonprofitId: z.string(),
-  amountCents: z.number().int().min(100),
+  amountCents: z.number().int().min(100).max(1_000_000_00), // $1 – $1,000,000
 });
 
 export async function POST(req: NextRequest) {

@@ -7,6 +7,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { api, Nonprofit } from "@/lib/api";
 import { formatCents, COLORS } from "@/lib/utils";
+import { LinearGradient } from "expo-linear-gradient";
 import { DonateSheet } from "@/components/DonateSheet";
 import { useAuth } from "@/context/AuthContext";
 
@@ -77,7 +78,10 @@ export default function NonprofitScreen() {
     <>
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         {/* Cover + logo */}
-        <View style={styles.cover}>
+        <LinearGradient
+          colors={[COLORS.brand, COLORS.brandDark]}
+          style={styles.cover}
+        >
           <View style={styles.logoContainer}>
             {nonprofit.logoUrl ? (
               <Image source={{ uri: nonprofit.logoUrl }} style={styles.logo} />
@@ -87,7 +91,7 @@ export default function NonprofitScreen() {
               </View>
             )}
           </View>
-        </View>
+        </LinearGradient>
 
         <View style={styles.body}>
           {/* Name + verified + follow */}
@@ -202,14 +206,18 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   errorText: { color: COLORS.gray500, fontSize: 16 },
   cover: {
-    height: 110,
-    backgroundColor: COLORS.brandLight,
+    height: 140,
     justifyContent: "flex-end",
   },
   logoContainer: {
     position: "absolute",
     bottom: -28,
     left: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
   },
   logo: {
     width: 72,
@@ -306,6 +314,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     gap: 8,
+    shadowColor: COLORS.brand,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 6,
   },
   donateBtnText: { color: COLORS.white, fontWeight: "700", fontSize: 16 },
 });

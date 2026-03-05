@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useState } from "react";
-import { Heart, Search, Receipt, User, LogOut, Menu, X } from "lucide-react";
+import { Heart, User, LogOut, Menu, X, LayoutDashboard, Shield } from "lucide-react";
 
 export function NavBar() {
   const { data: session } = useSession();
@@ -22,10 +22,23 @@ export function NavBar() {
 
           {/* Desktop nav */}
           <div className="hidden md:flex items-center gap-6 text-sm font-medium">
-            <Link href="/" className="text-gray-600 hover:text-brand-600 transition-colors">Feed</Link>
+            <a href="/#how-it-works" className="text-gray-600 hover:text-brand-600 transition-colors">How it works</a>
+            <a href="/#features" className="text-gray-600 hover:text-brand-600 transition-colors">Features</a>
             <Link href="/discover" className="text-gray-600 hover:text-brand-600 transition-colors">Discover</Link>
             {session && (
               <Link href="/tax" className="text-gray-600 hover:text-brand-600 transition-colors">Tax Center</Link>
+            )}
+            {session && (session.user.hasNonprofitAccess || session.user.role === "PLATFORM_ADMIN") && (
+              <Link href="/portal/dashboard" className="inline-flex items-center gap-1.5 bg-brand-600 text-white px-3.5 py-1.5 rounded-full text-sm font-semibold hover:bg-brand-700 transition-colors">
+                <LayoutDashboard className="w-3.5 h-3.5" />
+                Portal
+              </Link>
+            )}
+            {session && session.user.role === "PLATFORM_ADMIN" && (
+              <Link href="/admin" className="inline-flex items-center gap-1.5 bg-violet-600 text-white px-3.5 py-1.5 rounded-full text-sm font-semibold hover:bg-violet-700 transition-colors">
+                <Shield className="w-3.5 h-3.5" />
+                Admin
+              </Link>
             )}
           </div>
 
@@ -83,12 +96,23 @@ export function NavBar() {
       {/* Mobile menu */}
       {menuOpen && (
         <div className="md:hidden bg-white border-t border-gray-100 px-4 py-4 space-y-3">
-          <Link href="/" className="block text-gray-700 hover:text-brand-600" onClick={() => setMenuOpen(false)}>Feed</Link>
+          <a href="/#how-it-works" className="block text-gray-700 hover:text-brand-600" onClick={() => setMenuOpen(false)}>How it works</a>
+          <a href="/#features" className="block text-gray-700 hover:text-brand-600" onClick={() => setMenuOpen(false)}>Features</a>
           <Link href="/discover" className="block text-gray-700 hover:text-brand-600" onClick={() => setMenuOpen(false)}>Discover</Link>
           {session && (
             <>
               <Link href="/tax" className="block text-gray-700 hover:text-brand-600" onClick={() => setMenuOpen(false)}>Tax Center</Link>
               <Link href={`/u/${session.user.username}`} className="block text-gray-700 hover:text-brand-600" onClick={() => setMenuOpen(false)}>Profile</Link>
+              {(session.user.hasNonprofitAccess || session.user.role === "PLATFORM_ADMIN") && (
+                <Link href="/portal/dashboard" className="block font-semibold text-brand-600 hover:text-brand-700" onClick={() => setMenuOpen(false)}>
+                  Portal Dashboard
+                </Link>
+              )}
+              {session.user.role === "PLATFORM_ADMIN" && (
+                <Link href="/admin" className="block font-semibold text-violet-600 hover:text-violet-700" onClick={() => setMenuOpen(false)}>
+                  Admin Panel
+                </Link>
+              )}
               <button onClick={() => signOut()} className="block text-gray-500 text-sm">Sign out</button>
             </>
           )}

@@ -1,7 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   View, Text, TouchableOpacity, TextInput,
-  StyleSheet, Modal, Alert, ActivityIndicator, Linking,
+  StyleSheet, Modal, Alert, ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { api } from "@/lib/api";
@@ -24,6 +24,8 @@ export function DonateSheet({ visible, nonprofitId, nonprofitName, onClose }: Pr
   const [selectedAmount, setSelectedAmount] = useState(25);
   const [customAmount, setCustomAmount] = useState("");
   const [loading, setLoading] = useState(false);
+  // Synchronous guard against rapid double-taps creating two checkout sessions.
+  const submittingRef = useRef(false);
 
   const finalAmount = customAmount ? parseFloat(customAmount) : selectedAmount;
   const amountCents = Math.round(finalAmount * 100);
@@ -38,13 +40,16 @@ export function DonateSheet({ visible, nonprofitId, nonprofitName, onClose }: Pr
       Alert.alert("Minimum donation is $1.00");
       return;
     }
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setLoading(true);
     try {
-      const { url } = await api.stripe.createCheckoutSession(nonprofitId, amountCents);
-      await Linking.openURL(url);
+      const { donationId } = await api.donations.mock(nonprofitId, amountCents);
       onClose();
+      router.push({ pathname: "/donation/success", params: { donation_id: donationId } });
     } catch (e) {
-      Alert.alert("Error", (e as Error).message ?? "Could not start checkout");
+      Alert.alert("Error", (e as Error).message ?? "Could not process donation");
+      submittingRef.current = false;
     } finally {
       setLoading(false);
     }

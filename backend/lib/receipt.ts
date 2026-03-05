@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/prisma";
+import { randomBytes } from "crypto";
 
 export function generateReceiptNumber(): string {
   const year = new Date().getFullYear();
-  const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const random = randomBytes(4).toString("hex").toUpperCase();
   return `RCT-${year}-${random}`;
 }
 
@@ -43,13 +44,17 @@ export async function createReceiptForDonation(donationId: string) {
     donatedAt,
   });
 
-  return prisma.receipt.create({
-    data: {
+  // upsert so webhook retries after a transient failure do not throw a
+  // unique-constraint error on the already-existing receipt row.
+  return prisma.receipt.upsert({
+    where: { donationId },
+    create: {
       donationId,
       receiptNumber: generateReceiptNumber(),
       taxYear: donatedAt.getFullYear(),
       legalText,
       issuedAt: new Date(),
     },
+    update: {}, // no-op on retry
   });
 }

@@ -3,10 +3,26 @@ import { getSession } from "@/lib/getSession";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
+const ALLOWED_IMAGE_HOSTS = [
+  "supabase.co",
+  "lh3.googleusercontent.com",
+  "avatars.githubusercontent.com",
+];
+
+function isAllowedImageUrl(url: string): boolean {
+  try {
+    const { hostname, protocol } = new URL(url);
+    if (protocol !== "https:") return false;
+    return ALLOWED_IMAGE_HOSTS.some((h) => hostname === h || hostname.endsWith(`.${h}`));
+  } catch {
+    return false;
+  }
+}
+
 const schema = z.object({
   nonprofitId: z.string(),
   donationId: z.string().optional(),
-  caption: z.string().max(2200),
+  caption: z.string().min(1).max(2200),
   imageUrl: z.string().url().optional(),
   allowComments: z.boolean().optional(),
 });
@@ -24,6 +40,10 @@ export async function POST(req: NextRequest) {
   }
 
   const { nonprofitId, donationId, caption, imageUrl, allowComments } = parsed.data;
+
+  if (imageUrl && !isAllowedImageUrl(imageUrl)) {
+    return NextResponse.json({ error: "Image must be hosted on an allowed domain" }, { status: 400 });
+  }
 
   // Verify nonprofit exists
   const nonprofit = await prisma.nonprofit.findUnique({ where: { id: nonprofitId } });

@@ -6,10 +6,14 @@ import { NextRequest, NextResponse } from "next/server";
 export async function GET(req: NextRequest) {
   const redirect = req.nextUrl.searchParams.get("redirect");
 
-  if (
+  // Only allow the exact registered production deep link scheme.
+  // exp:// is the Expo Go dev scheme — only permitted outside production.
+  const isValidRedirect =
     redirect &&
-    (redirect.startsWith("exp://") || redirect.startsWith("givestream://"))
-  ) {
+    (redirect.startsWith("givestream://auth/callback") ||
+      (process.env.NODE_ENV !== "production" && redirect.startsWith("exp://")));
+
+  if (isValidRedirect) {
     const sessionCookie =
       req.cookies.get("__Secure-authjs.session-token") ??
       req.cookies.get("authjs.session-token") ??
@@ -18,7 +22,10 @@ export async function GET(req: NextRequest) {
 
     let target = redirect;
     if (sessionCookie?.value) {
-      target += `?token=${encodeURIComponent(sessionCookie.value)}`;
+      // Use a URL fragment (#) instead of a query param so the token is never
+      // sent to any server, never stored in HTTP access logs, and not forwarded
+      // by OS redirect handling. The Expo app reads it from the deep link hash.
+      target += `#token=${encodeURIComponent(sessionCookie.value)}`;
     }
 
     return NextResponse.redirect(target);

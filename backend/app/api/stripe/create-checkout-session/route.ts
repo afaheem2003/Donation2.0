@@ -6,7 +6,7 @@ import { z } from "zod";
 
 const schema = z.object({
   nonprofitId: z.string(),
-  amountCents: z.number().int().min(100), // minimum $1
+  amountCents: z.number().int().min(100).max(1_000_000_00), // $1 – $1,000,000
 });
 
 export async function POST(req: NextRequest) {
@@ -39,7 +39,11 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const webUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  // EXPO_DEEP_LINK_BASE routes the Stripe redirect back into the mobile app
+  // (e.g. "givestream://" or a universal link). Falls back to the web URL so
+  // browser-initiated sessions still work without extra env config.
+  const deepLinkBase = process.env.EXPO_DEEP_LINK_BASE ?? webUrl;
 
   const checkoutSession = await stripe.checkout.sessions.create({
     payment_method_types: ["card"],
@@ -63,8 +67,8 @@ export async function POST(req: NextRequest) {
       nonprofitId,
       userId: session.user.id,
     },
-    success_url: `${appUrl}/donation/success?session_id={CHECKOUT_SESSION_ID}&donation_id=${donation.id}`,
-    cancel_url: `${appUrl}/n/${nonprofitId}?cancelled=true`,
+    success_url: `${deepLinkBase}/donation/success?session_id={CHECKOUT_SESSION_ID}&donation_id=${donation.id}`,
+    cancel_url: `${deepLinkBase}/n/${nonprofitId}?cancelled=true`,
     customer_email: session.user.email ?? undefined,
   });
 

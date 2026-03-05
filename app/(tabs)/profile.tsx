@@ -179,13 +179,15 @@ export default function ProfileScreen() {
         {/* Profile header */}
         <View style={styles.profileCard}>
           <View style={styles.avatarRow}>
-            {user.image ? (
-              <Image source={{ uri: user.image }} style={styles.avatar} />
-            ) : (
-              <View style={[styles.avatar, styles.avatarFallback]}>
-                <Text style={styles.avatarText}>{initials}</Text>
-              </View>
-            )}
+            <View style={styles.avatarOuter}>
+              {user.image ? (
+                <Image source={{ uri: user.image }} style={styles.avatar} />
+              ) : (
+                <View style={[styles.avatar, styles.avatarFallback]}>
+                  <Text style={styles.avatarText}>{initials}</Text>
+                </View>
+              )}
+            </View>
             <View style={styles.profileInfo}>
               <Text style={styles.name}>{user.name ?? user.username}</Text>
               <Text style={styles.username}>@{user.username}</Text>
@@ -531,6 +533,12 @@ const styles = StyleSheet.create({
     borderColor: COLORS.gray100,
   },
   avatarRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
+  avatarOuter: {
+    borderWidth: 2.5,
+    borderColor: COLORS.brand,
+    borderRadius: 33,
+    padding: 2,
+  },
   avatar: { width: 58, height: 58, borderRadius: 29 },
   avatarFallback: {
     backgroundColor: COLORS.brandLight,
@@ -549,7 +557,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  stats: { flexDirection: "row", alignItems: "center", marginBottom: 14 },
+  stats: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 14,
+    backgroundColor: COLORS.bg,
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+  },
   stat: { flex: 1, alignItems: "center" },
   statValue: { fontSize: 17, fontWeight: "700", color: COLORS.gray900 },
   statLabel: { fontSize: 11, color: COLORS.gray400, marginTop: 2 },

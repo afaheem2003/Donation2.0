@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/getSession";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import * as React from "react";
+import { sendEmail } from "@/lib/email";
+import { DonationReceiptEmail } from "@/emails/DonationReceiptEmail";
 
 const schema = z.object({
   nonprofitId: z.string(),
@@ -9,6 +12,16 @@ const schema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  // This endpoint creates succeeded donations without a real Stripe charge.
+  // Gated by both NODE_ENV and an explicit env flag — NODE_ENV alone is not
+  // reliable across all deployment environments (staging, preview, self-hosted).
+  if (
+    process.env.NODE_ENV === "production" ||
+    process.env.ENABLE_MOCK_DONATIONS !== "true"
+  ) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const session = await getSession(req);
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -48,6 +61,31 @@ export async function POST(req: NextRequest) {
       },
     },
   });
+
+  // Send receipt email (non-blocking)
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { name: true, email: true },
+    });
+    if (user?.email) {
+      await sendEmail({
+        to: user.email,
+        subject: `Your donation receipt — ${nonprofit.name}`,
+        react: React.createElement(DonationReceiptEmail, {
+          donorName: user.name ?? "Generous Donor",
+          nonprofitName: nonprofit.name,
+          nonprofitEin: nonprofit.ein,
+          amountCents,
+          donatedAt: now,
+          receiptNumber: `MOCK-${Date.now()}`,
+          taxYear,
+        }),
+      });
+    }
+  } catch (emailErr) {
+    console.error("Mock donation receipt email failed:", emailErr);
+  }
 
   return NextResponse.json({ donationId: donation.id }, { status: 201 });
 }

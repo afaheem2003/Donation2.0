@@ -11,6 +11,7 @@ export interface AppSession {
     username: string;
     role: string;
     usernameSet: boolean;
+    hasNonprofitAccess: boolean;
   };
 }
 
@@ -28,7 +29,8 @@ export async function getSession(req: NextRequest): Promise<AppSession | null> {
   const authHeader = req.headers.get("authorization");
   if (authHeader?.startsWith("Bearer ")) {
     const token = authHeader.slice(7).trim();
-    if (token) {
+    // Reject tokens that are clearly malformed — prevents arbitrary-length DB queries
+    if (token && token.length <= 512) {
       const dbSession = await prisma.session.findUnique({
         where: { sessionToken: token },
         include: {
@@ -47,6 +49,7 @@ export async function getSession(req: NextRequest): Promise<AppSession | null> {
       });
       if (dbSession && dbSession.expires > new Date() && dbSession.user) {
         const u = dbSession.user;
+        const nonprofitCount = await prisma.nonprofitAdmin.count({ where: { userId: u.id } });
         return {
           user: {
             id: u.id,
@@ -56,33 +59,27 @@ export async function getSession(req: NextRequest): Promise<AppSession | null> {
             username: u.username,
             usernameSet: u.usernameSet,
             role: String(u.role),
+            hasNonprofitAccess: nonprofitCount > 0,
           },
         };
       }
     }
   }
 
+
   // 2. Fall back to NextAuth cookie session (web browser)
   const session = await auth();
   if (!session?.user) return null;
-  const u = session.user as {
-    id: string;
-    name?: string | null;
-    email?: string | null;
-    image?: string | null;
-    username?: string;
-    role?: string;
-    usernameSet?: boolean;
-  };
   return {
     user: {
-      id: u.id,
-      name: u.name ?? null,
-      email: u.email ?? null,
-      image: u.image ?? null,
-      username: u.username ?? "",
-      role: u.role ?? "DONOR",
-      usernameSet: u.usernameSet ?? false,
+      id: session.user.id,
+      name: session.user.name ?? null,
+      email: session.user.email ?? null,
+      image: session.user.image ?? null,
+      username: session.user.username ?? "",
+      role: session.user.role ?? "DONOR",
+      usernameSet: session.user.usernameSet ?? false,
+      hasNonprofitAccess: session.user.hasNonprofitAccess ?? false,
     },
   };
 }
